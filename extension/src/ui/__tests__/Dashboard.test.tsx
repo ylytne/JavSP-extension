@@ -3,6 +3,18 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { Dashboard } from "../pages/Dashboard";
 import { getSourceLabel } from "../pages/dashboard/services/scraperPipeline";
+import { useDashboardTasks } from "../pages/dashboard/hooks/useDashboardTasks";
+import { CrawlerRuntimeConfig } from "../pages/dashboard/types";
+
+vi.mock("../pages/dashboard/services/scraperPipeline", async () => {
+  const actual = await vi.importActual<any>("../pages/dashboard/services/scraperPipeline");
+  return {
+    ...actual,
+    executeScrapePipeline: vi.fn().mockImplementation(async ({ onUpdateTask }) => {
+      onUpdateTask({ status: "completed" });
+    }),
+  };
+});
 
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -106,5 +118,79 @@ describe("Dashboard 模块化重构后的组件与服务测试", () => {
     });
 
     expect(input.value).toBe("D:/NewMovies");
+  });
+
+  it("useDashboardTasks 批量处理时当达到批次目标应触发大批量防爬冷却保护", async () => {
+    const logs: string[] = [];
+    const addLog = vi.fn((_level: any, msg: string) => {
+      logs.push(msg);
+    });
+
+    const testCrawlerConfig: CrawlerRuntimeConfig = {
+      retry: 1,
+      timeout: 5,
+      sleepAfterScraping: 0.01,
+      sleepJitter: 0,
+      extraFanartsEnabled: false,
+      extraFanartsInterval: 0,
+      extraFanartsMaxCount: 0,
+      extraFanartsUniformSampling: true,
+      extraFanartsTimeout: 5,
+      actressAvatarEnabled: false,
+      actressAvatarInterval: 0,
+      actressAvatarTimeout: 5,
+      includeTrailer: false,
+      crawlers: ["javbus"],
+      useJavdbCover: "fallback",
+      burstProtectionEnabled: true,
+      burstLimit: 2,
+      burstJitter: 0,
+      burstCooldown: 0.02,
+      burstCooldownJitter: 0,
+    };
+
+    let hookResult: any;
+    const TestComponent = () => {
+      hookResult = useDashboardTasks({
+        scanDir: "D:/Videos",
+        crawlerConfig: testCrawlerConfig,
+        translatorConfig: null,
+        addLog,
+      });
+      return null;
+    };
+
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<TestComponent />);
+    });
+
+    // 预注入 3 个待整理任务
+    await act(async () => {
+      hookResult.setTasks([
+        { taskId: "task-1", dvdid: "IPX-001", files: ["1.mp4"], status: "pending" },
+        { taskId: "task-2", dvdid: "IPX-002", files: ["2.mp4"], status: "pending" },
+        { taskId: "task-3", dvdid: "IPX-003", files: ["3.mp4"], status: "pending" },
+      ]);
+    });
+
+    // 启动批量
+    await act(async () => {
+      await hookResult.handleBatchStart();
+    });
+
+    // 验证日志中记录了大批量防爬保护的触发
+    const burstLog = logs.find((l) => l.includes("[大批量防爬保护] 已连续处理 2 部影片"));
+    expect(burstLog).toBeDefined();
+    expect(burstLog).toContain("达到本批次上限 2 部");
+    expect(burstLog).toContain("系统将休眠冷却");
+
+    // 验证冷却结束日志
+    const finishLog = logs.find((l) => l.includes("[大批量防爬保护] 冷却休眠结束"));
+    expect(finishLog).toBeDefined();
+
+    // 验证所有任务最终处理完毕
+    const allDoneLog = logs.find((l) => l.includes("批量处理队列已全部执行完毕"));
+    expect(allDoneLog).toBeDefined();
   });
 });

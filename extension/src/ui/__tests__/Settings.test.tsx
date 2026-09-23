@@ -163,6 +163,44 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
     expect(container.textContent).toContain("JavDB");
     expect(container.textContent).toContain("AirAV");
     expect(container.textContent).toContain("单次网络请求超时时间");
+    expect(container.textContent).toContain("大批量请求冷却防风控保护");
+    expect(container.textContent).toContain("连续抓取基准数量");
+  });
+
+  it("NetworkTab 应支持配置大批量请求冷却防风控保护的启闭与参数更新", async () => {
+    let currentConfig = JSON.parse(JSON.stringify(mockConfig));
+    const updateForm = vi.fn((updater) => {
+      currentConfig = updater(currentConfig);
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<NetworkTab formConfig={currentConfig} updateForm={updateForm} />);
+    });
+
+    // 检查启闭开关
+    const toggle = container.querySelector(
+      "input[aria-label='启用大批量请求冷却保护']"
+    ) as HTMLInputElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.checked).toBe(true);
+
+    // 触发关闭开关
+    await act(async () => {
+      toggle.click();
+    });
+    expect(currentConfig.crawler.burst_protection_enabled).toBe(false);
+
+    // 重新渲染为开启状态以测试输入框
+    currentConfig.crawler.burst_protection_enabled = true;
+    currentConfig.crawler.burst_limit = 10;
+    currentConfig.crawler.burst_jitter = 2;
+    await act(async () => {
+      root.render(<NetworkTab formConfig={currentConfig} updateForm={updateForm} />);
+    });
+
+    expect(container.textContent).toContain("当前动态保护节奏");
+    expect(container.textContent).toContain("8 ~ 12");
   });
 
   it("NetworkTab 应支持独立切换启用与停用爬虫站点", async () => {

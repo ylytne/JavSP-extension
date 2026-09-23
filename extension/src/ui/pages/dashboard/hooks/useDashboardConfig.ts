@@ -22,6 +22,11 @@ const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
   includeTrailer: false,
   crawlers: ["javbus", "javdb", "airav"],
   useJavdbCover: "fallback",
+  burstProtectionEnabled: true,
+  burstLimit: 10,
+  burstJitter: 2,
+  burstCooldown: 60.0,
+  burstCooldownJitter: 10.0,
 };
 
 export function useDashboardConfig(addLog: (level: LogEntry["level"], message: string) => void) {
@@ -73,6 +78,18 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
       includeTrailer: typeof nfoCfg.include_trailer === "boolean" ? nfoCfg.include_trailer : prev.includeTrailer,
       crawlers: Array.isArray(cfg.crawlers) && cfg.crawlers.length > 0 ? cfg.crawlers : prev.crawlers,
       useJavdbCover: (coverCfg.use_javdb_cover === "never" ? "never" : "fallback") as "fallback" | "never",
+      burstProtectionEnabled:
+        typeof crw.burst_protection_enabled === "boolean"
+          ? crw.burst_protection_enabled
+          : prev.burstProtectionEnabled,
+      burstLimit: typeof crw.burst_limit === "number" ? crw.burst_limit : prev.burstLimit,
+      burstJitter: typeof crw.burst_jitter === "number" ? crw.burst_jitter : prev.burstJitter,
+      burstCooldown:
+        typeof crw.burst_cooldown === "number" ? crw.burst_cooldown : prev.burstCooldown,
+      burstCooldownJitter:
+        typeof crw.burst_cooldown_jitter === "number"
+          ? crw.burst_cooldown_jitter
+          : prev.burstCooldownJitter,
     }));
   }, []);
 

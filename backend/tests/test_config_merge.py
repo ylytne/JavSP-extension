@@ -177,6 +177,40 @@ def test_cli_token_management(tmp_path: Path, monkeypatch, capsys):
         assert loaded["server"]["token"].startswith("javsp_")
     finally:
         orig_config.server.token = orig_token
-        monkeypatch.delenv("JAVSP_CONFIG_FILE", raising=False)
         load_config()
+
+
+def test_crawler_burst_protection_config_defaults_and_override(tmp_path: Path):
+    """测试爬虫大批量请求冷却保护 (Burst Protection) 配置的默认加载与自定义覆盖。"""
+    # 1. 默认配置加载校验
+    default_cfg = get_default_config()
+    assert default_cfg.crawler.burst_protection_enabled is True
+    assert default_cfg.crawler.burst_limit == 10
+    assert default_cfg.crawler.burst_jitter == 2
+    assert default_cfg.crawler.burst_cooldown == 60.0
+    assert default_cfg.crawler.burst_cooldown_jitter == 10.0
+
+    # 2. 自定义覆盖校验
+    custom_yaml = tmp_path / "config.yml"
+    custom_yaml.write_text(
+        yaml.dump({
+            "crawler": {
+                "burst_protection_enabled": False,
+                "burst_limit": 15,
+                "burst_jitter": 3,
+                "burst_cooldown": 90.0,
+                "burst_cooldown_jitter": 15.0,
+            }
+        }),
+        encoding="utf-8",
+    )
+    loaded = load_config(config_path=custom_yaml)
+    assert loaded.crawler.burst_protection_enabled is False
+    assert loaded.crawler.burst_limit == 15
+    assert loaded.crawler.burst_jitter == 3
+    assert loaded.crawler.burst_cooldown == 90.0
+    assert loaded.crawler.burst_cooldown_jitter == 15.0
+    # 验证未覆盖的原有爬虫字段依然保留默认值
+    assert loaded.crawler.sleep_after_scraping == 2.0
+    assert loaded.crawler.sleep_jitter == 2.0
 

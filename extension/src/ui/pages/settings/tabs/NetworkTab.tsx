@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Plus, AlertCircle, Info, Check } from "lucide-react";
+import { X, Plus, AlertCircle, Info, Check, Coffee } from "lucide-react";
 import { FullAppConfig } from "../types";
 import { extractHostname } from "../../../../crawlers/tabBridge";
 
@@ -269,6 +269,149 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
             className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
+      </div>
+
+      {/* 大批量请求冷却防风控保护 (Burst Protection) */}
+      <div className="pt-2 border-t border-slate-100 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <label className="block text-xs font-bold text-slate-700">
+                大批量请求冷却防风控保护 (Burst Protection)
+              </label>
+              <span className="text-[10px] font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full">
+                推荐开启
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              大批量处理时按批次强制休眠较长时间，模拟真实人类浏览间隔，强效规避 Cloudflare / WAF 行为特征判定与 IP 封禁
+            </p>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formConfig.crawler.burst_protection_enabled ?? true}
+              onChange={(e) =>
+                updateForm((cfg) => {
+                  cfg.crawler.burst_protection_enabled = e.target.checked;
+                  return cfg;
+                })
+              }
+              aria-label="启用大批量请求冷却保护"
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+
+        {(formConfig.crawler.burst_protection_enabled ?? true) && (
+          <div className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  连续抓取基准数量 (部)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={formConfig.crawler.burst_limit ?? 10}
+                  onChange={(e) =>
+                    updateForm((cfg) => {
+                      cfg.crawler.burst_limit = Math.max(1, parseInt(e.target.value, 10) || 1);
+                      return cfg;
+                    })
+                  }
+                  className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  批次随机浮动范围 (±部, Jitter)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formConfig.crawler.burst_jitter ?? 2}
+                  onChange={(e) =>
+                    updateForm((cfg) => {
+                      cfg.crawler.burst_jitter = Math.max(0, parseInt(e.target.value, 10) || 0);
+                      return cfg;
+                    })
+                  }
+                  className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  批次休眠冷却基准时长 (秒)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formConfig.crawler.burst_cooldown ?? 60}
+                  onChange={(e) =>
+                    updateForm((cfg) => {
+                      cfg.crawler.burst_cooldown = Math.max(0, parseFloat(e.target.value) || 0);
+                      return cfg;
+                    })
+                  }
+                  className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  冷却时长随机浮动 (秒, Jitter)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formConfig.crawler.burst_cooldown_jitter ?? 10}
+                  onChange={(e) =>
+                    updateForm((cfg) => {
+                      cfg.crawler.burst_cooldown_jitter = Math.max(0, parseFloat(e.target.value) || 0);
+                      return cfg;
+                    })
+                  }
+                  className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                />
+              </div>
+            </div>
+
+            {/* 动态计算结果与效果说明 */}
+            <div className="p-2.5 bg-indigo-50/60 border border-indigo-100 rounded-lg text-[11px] text-indigo-900 leading-relaxed flex items-center gap-2">
+              <Coffee size={14} className="text-indigo-600 shrink-0" />
+              <span>
+                <strong>当前动态保护节奏</strong>：每连续抓取{" "}
+                <span className="font-mono font-bold text-indigo-700">
+                  {Math.max(
+                    1,
+                    (formConfig.crawler.burst_limit ?? 10) - (formConfig.crawler.burst_jitter ?? 2)
+                  )}
+                  {" ~ "}
+                  {(formConfig.crawler.burst_limit ?? 10) + (formConfig.crawler.burst_jitter ?? 2)}
+                </span>{" "}
+                部影片，系统自动进入长时休眠冷却{" "}
+                <span className="font-mono font-bold text-indigo-700">
+                  {(formConfig.crawler.burst_cooldown ?? 60).toFixed(0)}
+                  {" ~ "}
+                  {(
+                    (formConfig.crawler.burst_cooldown ?? 60) +
+                    (formConfig.crawler.burst_cooldown_jitter ?? 10)
+                  ).toFixed(0)}
+                </span>{" "}
+                秒，随后继续按正常单部延时恢复抓取。
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 标签页桥接 (TabBridge) 站点名单 */}

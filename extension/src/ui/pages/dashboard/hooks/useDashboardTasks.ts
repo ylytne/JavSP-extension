@@ -6,6 +6,11 @@ import { TranslatorConfig } from "../../../../translators";
 import { LogEntry } from "../../../components/LogDrawer";
 import { CrawlerRuntimeConfig, ScanProgress, StatusFilter } from "../types";
 import { executeScrapePipeline } from "../services/scraperPipeline";
+import {
+  calculateNextBurstTarget,
+  calculateBurstCooldown,
+  interruptibleSleep,
+} from "../services/burstProtection";
 
 export interface UseDashboardTasksOptions {
   scanDir: string;
@@ -213,6 +218,12 @@ export function useDashboardTasks({
     batchCancelRef.current = false;
     addLog("info", `开始批量处理，共有 ${pendingTasks.length} 部影片入队`);
 
+    let processedCountInCurrentBurst = 0;
+    let currentBurstTarget = calculateNextBurstTarget(
+      crawlerConfig.burstLimit,
+      crawlerConfig.burstJitter
+    );
+
     for (let i = 0; i < pendingTasks.length; i++) {
       if (batchCancelRef.current) {
         addLog("warn", "批量处理已被用户手动中止");
@@ -220,22 +231,67 @@ export function useDashboardTasks({
       }
       const task = pendingTasks[i];
       await handleScrapeSingle(task);
+      processedCountInCurrentBurst++;
 
-      // 非最后一项且未中止时，执行带随机浮动的文明爬取延时
+      // 非最后一项且未中止时，执行等待控制
       if (i < pendingTasks.length - 1 && !batchCancelRef.current) {
-        const waitSec =
-          crawlerConfig.sleepAfterScraping + Math.random() * crawlerConfig.sleepJitter;
-        addLog(
-          "step",
-          `等待 ${waitSec.toFixed(1)} 秒后开始处理下一部影片（基础 ${crawlerConfig.sleepAfterScraping}s + 随机浮动）...`
-        );
-        await new Promise((r) => setTimeout(r, waitSec * 1000));
+        // 检查是否触发大批量请求冷却防风控保护
+        if (
+          crawlerConfig.burstProtectionEnabled &&
+          processedCountInCurrentBurst >= currentBurstTarget
+        ) {
+          const cooldownSec = calculateBurstCooldown(
+            crawlerConfig.burstCooldown,
+            crawlerConfig.burstCooldownJitter
+          );
+          addLog(
+            "warn",
+            `[大批量防爬保护] 已连续处理 ${processedCountInCurrentBurst} 部影片 (达到本批次上限 ${currentBurstTarget} 部)，系统将休眠冷却 ${cooldownSec.toFixed(1)} 秒以规避站点风控阻断...`
+          );
+
+          const completed = await interruptibleSleep(cooldownSec * 1000, batchCancelRef);
+          if (!completed || batchCancelRef.current) {
+            addLog("warn", "批量处理已被用户手动中止");
+            break;
+          }
+
+          addLog("info", `[大批量防爬保护] 冷却休眠结束，继续按正常节奏恢复抓取`);
+          processedCountInCurrentBurst = 0;
+          currentBurstTarget = calculateNextBurstTarget(
+            crawlerConfig.burstLimit,
+            crawlerConfig.burstJitter
+          );
+        } else {
+          // 基础文明爬取延时
+          const waitSec =
+            crawlerConfig.sleepAfterScraping + Math.random() * crawlerConfig.sleepJitter;
+          addLog(
+            "step",
+            `等待 ${waitSec.toFixed(1)} 秒后开始处理下一部影片（基础 ${crawlerConfig.sleepAfterScraping}s + 随机浮动）...`
+          );
+          const completed = await interruptibleSleep(waitSec * 1000, batchCancelRef);
+          if (!completed || batchCancelRef.current) {
+            addLog("warn", "批量处理已被用户手动中止");
+            break;
+          }
+        }
       }
     }
 
     setIsBatchRunning(false);
     addLog("info", "批量处理队列已全部执行完毕");
-  }, [tasks, handleScrapeSingle, crawlerConfig.sleepAfterScraping, crawlerConfig.sleepJitter, addLog]);
+  }, [
+    tasks,
+    handleScrapeSingle,
+    crawlerConfig.burstProtectionEnabled,
+    crawlerConfig.burstLimit,
+    crawlerConfig.burstJitter,
+    crawlerConfig.burstCooldown,
+    crawlerConfig.burstCooldownJitter,
+    crawlerConfig.sleepAfterScraping,
+    crawlerConfig.sleepJitter,
+    addLog,
+  ]);
 
   const handleBatchStop = useCallback(() => {
     batchCancelRef.current = true;

@@ -198,6 +198,12 @@ class CrawlerConfig(BaseModel):
     sleep_after_scraping: float = 2.0
     sleep_jitter: float = 2.0
     tab_bridge_hosts: list[str] = Field(default_factory=lambda: ["airav.io"])
+    # 大批量抓取请求冷却防风控保护 (Burst Protection)
+    burst_protection_enabled: bool = True
+    burst_limit: int = 10
+    burst_jitter: int = 2
+    burst_cooldown: float = 60.0
+    burst_cooldown_jitter: float = 10.0
 
 
 class ServerConfig(BaseModel):

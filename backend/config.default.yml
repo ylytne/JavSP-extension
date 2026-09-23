@@ -41,6 +41,12 @@ crawler:
   sleep_jitter: 2.0
   tab_bridge_hosts:
   - airav.io
+  # 大批量请求冷却防风控保护 (Burst Protection)
+  burst_protection_enabled: true
+  burst_limit: 10
+  burst_jitter: 2
+  burst_cooldown: 60.0
+  burst_cooldown_jitter: 10.0
 crawlers:
 - javbus
 - javdb

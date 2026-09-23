@@ -16,6 +16,11 @@ export interface CrawlerRuntimeConfig {
   includeTrailer: boolean;
   crawlers: string[];
   useJavdbCover: "fallback" | "never";
+  burstProtectionEnabled: boolean;
+  burstLimit: number;
+  burstJitter: number;
+  burstCooldown: number;
+  burstCooldownJitter: number;
 }
 
 export type StatusFilter = "all" | "pending" | "completed" | "error";

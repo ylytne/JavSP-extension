@@ -16,6 +16,11 @@ export interface CrawlerConfig {
   sleep_after_scraping: number;
   sleep_jitter: number;
   tab_bridge_hosts?: string[];
+  burst_protection_enabled?: boolean;
+  burst_limit?: number;
+  burst_jitter?: number;
+  burst_cooldown?: number;
+  burst_cooldown_jitter?: number;
 }
 
 export interface SummarizerPathConfig {
