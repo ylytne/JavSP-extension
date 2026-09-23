@@ -1,0 +1,19 @@
+services:
+  javsp-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: javsp-backend:latest
+    container_name: javsp-backend
+    restart: unless-stopped
+    ports:
+      - "${JAVSP_PORT:-8765}:8765"
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - JAVSP_HOST=0.0.0.0
+      - JAVSP_PORT=8765
+    volumes:
+      # 挂载宿主机配置目录（首次启动后，容器自动在此目录下生成 config.yml 与 API_TOKEN.txt）
+      - ${JAVSP_CONFIG_DIR:-./config}:/app/config
+      # 映射 NAS / 宿主机上的影视待整理与归档目录（默认从 .env 中的 JAVSP_MEDIA_DIR 读取）
+      - ${JAVSP_MEDIA_DIR:-./data}:/media

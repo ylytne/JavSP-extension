@@ -1,0 +1,25 @@
+#!/bin/sh
+# Git pre-commit hook: 自动同步 backend/requirements.txt 与 backend/pyproject.toml
+
+# 检查暂存区中是否存在 backend/pyproject.toml 或 backend/uv.lock 的改动
+STAGED_DEPS=$(git diff --cached --name-only | grep -E '^backend/(pyproject\.toml|uv\.lock)$')
+
+# 如果依赖文件被修改，或者 backend/requirements.txt 尚不存在，则触发同步
+if [ -n "$STAGED_DEPS" ] || [ ! -f "backend/requirements.txt" ]; then
+    echo "[pre-commit] 检测到 backend 依赖定义变动，正在同步 backend/requirements.txt..."
+    
+    if command -v uv >/dev/null 2>&1; then
+        uv export --project backend --no-dev --no-hashes --no-emit-project -o backend/requirements.txt
+        if [ $? -eq 0 ]; then
+            git add backend/requirements.txt
+            echo "[pre-commit] backend/requirements.txt 已成功更新并自动暂存。"
+        else
+            echo "[pre-commit] 错误: uv export 导出依赖失败，请检查 pyproject.toml 语法。" >&2
+            exit 1
+        fi
+    else
+        echo "[pre-commit] 警告: 未在当前环境中检测到 uv 工具，跳过 requirements.txt 自动同步。" >&2
+    fi
+fi
+
+exit 0

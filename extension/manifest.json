@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "JavSP 刮削与整理助手",
+  "version": "0.1.0",
+  "description": "JavSP 浏览器扩展端：复用真实环境爬取 JavDB / JavBus，并与本地轻量后端协同整理。",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "declarativeNetRequest",
+    "tabs",
+    "scripting",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8765/*",
+    "https://*.javdb.com/*",
+    "https://*.javbus.com/*",
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "打开 JavSP 侧边栏控制台"
+  }
+}

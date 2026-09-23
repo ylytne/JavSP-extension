@@ -1,0 +1,124 @@
+scanner:
+  ignored_id_pattern:
+  - (144|240|360|480|720|1080)[Pp]
+  - '[24][Kk]'
+  - \w+2048\.com
+  - Carib(beancom)?
+  - '[^a-z\d](f?hd|lt)[^a-z\d]'
+  input_directory: null
+  filename_extensions:
+  - .3gp
+  - .avi
+  - .f4v
+  - .flv
+  - .iso
+  - .m2ts
+  - .m4v
+  - .mkv
+  - .mov
+  - .mp4
+  - .mpeg
+  - .rm
+  - .rmvb
+  - .ts
+  - .vob
+  - .webm
+  - .wmv
+  - .strm
+  - .mpg
+  ignored_folder_name_pattern:
+  - ^\.
+  - ^#recycle$
+  - ^#整理完成$
+  - ^#不要扫描$
+  minimum_size: 232MiB
+  skip_nfo_dir: true
+network:
+  retry: 3
+  timeout: 10.0
+crawler:
+  sleep_after_scraping: 2.0
+  sleep_jitter: 2.0
+  tab_bridge_hosts:
+  - airav.io
+crawlers:
+- javbus
+- javdb
+- airav
+summarizer:
+  move_files: true
+  path:
+    output_folder_pattern: '#整理完成/{actress}/[{num}] {title}'
+    basename_pattern: '{num}'
+    length_maximum: 250
+    length_by_byte: true
+    max_actress_count: 10
+    hard_link: false
+  title:
+    remove_trailing_actor_name: true
+  default:
+    title: '#未知标题'
+    actress: '#未知女优'
+    series: '#未知系列'
+    director: '#未知导演'
+    producer: '#未知制作商'
+    publisher: '#未知发行商'
+  nfo:
+    basename_pattern: movie
+    title_pattern: '{num} {title}'
+    custom_genres_fields:
+    - '{genre}'
+    - '{censor}'
+    custom_tags_fields:
+    - '{genre}'
+    - '{censor}'
+    # 女优头像 NFO <thumb> 写入模式：
+    # - none (推荐默认): 不向 NFO 写入 <thumb> 标签，纯粹依赖本地 .actors/ 目录或媒体库全局人物库，彻底根绝 Jellyfin 外网并发卡死
+    # - local: 若本地 .actors/ 下存在对应头像，则在 <thumb> 写入相对路径 ".actors/女优名.jpg"；若本地无头像则不写 <thumb>
+    # ⚠️ 注意：为防止媒体服务器并发请求第三方图床导致前端彻底卡死及 403 阻断，代码层面已永久杜绝写入外部 HTTP(S) URL！
+    actress_thumb_mode: none
+    # 是否在 NFO 中写入预告视频链接 (<trailer>)：
+    # - false (推荐默认): 不生成 <trailer> 标签。部分站点抓取的 m3u8 实为第三方在线切片流，极易失效/被墙，在 Jellyfin 影院模式下可能导致严重播放卡死
+    # - true: 允许写入抓取到的预告视频链接 (仅在网络通畅且需要预告流时开启)
+    include_trailer: false
+  censor_options_representation:
+  - 无码
+  - 有码
+  - 打码情况未知
+  cover:
+    basename_pattern: '{num}-poster'
+    add_label: false
+    use_javdb_cover: fallback
+    crop:
+      ratio: 1.5
+      engine: null
+      standard_fanza_crop: true
+  fanart:
+    basename_pattern: '{num}-fanart'
+  extra_fanarts:
+    enabled: true
+    scrap_interval: 0.5
+    timeout: 10.0
+    max_count: 10
+    uniform_sampling: true
+  actress_avatar:
+    enabled: true
+    scrap_interval: 0.5
+    timeout: 10.0
+translator:
+  target_lang: zh-CN
+  engine:
+    name: openai
+    url: https://api.groq.com/openai/v1/chat/completions
+    api_key: ''
+    model: llama-3.1-70b-versatile
+  fields:
+    title: true
+    plot: true
+server:
+  # 服务监听 IP。若在局域网 NAS / Docker 容器中部署，请设为 0.0.0.0 以允许局域网设备连接；本机运行保持 127.0.0.1
+  host: 127.0.0.1
+  port: 8765
+  # API 访问令牌（强烈建议公网/NAS部署时配置）。留空表示禁用鉴权；配置后前端必须提供匹配的 Token 才能访问
+  token: ""
+
