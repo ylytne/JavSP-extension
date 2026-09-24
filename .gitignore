@@ -1,5 +1,7 @@
 # Reference code
 JavSP/
+# gitignore
+!.gitignore  
 
 # Python
 __pycache__/
@@ -60,12 +62,14 @@ Thumbs.db
 .DS_Store
 
 # Agent guidance / Local docs
+CLAUDE.md
+.claude/
 AGENTS.md
-docs/
 
+# test data
 data/
 
 # Environment variables
 .env
 .env.*
-!.env.example
+!.env.example

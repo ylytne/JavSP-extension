@@ -171,6 +171,15 @@ class SummarizerActressAvatarConfig(BaseModel):
         return parse_duration_seconds(self.scrap_interval)
 
 
+class SummarizerSubtitleConfig(BaseModel):
+    """字幕文件归档整理配置。"""
+    enabled: bool = True
+    auto_c_suffix: bool = False
+    filename_extensions: list[str] = Field(
+        default_factory=lambda: [".srt", ".vtt", ".ass", ".ssa", ".sbv", ".idx", ".sub"]
+    )
+
+
 class SummarizerConfig(BaseModel):
     """汇总与归档整理综合配置。"""
     move_files: bool = True
@@ -185,6 +194,7 @@ class SummarizerConfig(BaseModel):
     fanart: SummarizerFanartConfig = Field(default_factory=SummarizerFanartConfig)
     extra_fanarts: SummarizerExtraFanartsConfig = Field(default_factory=SummarizerExtraFanartsConfig)
     actress_avatar: SummarizerActressAvatarConfig = Field(default_factory=SummarizerActressAvatarConfig)
+    subtitle: SummarizerSubtitleConfig = Field(default_factory=SummarizerSubtitleConfig)
 
 
 class NetworkConfig(BaseModel):

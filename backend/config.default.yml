@@ -111,6 +111,17 @@ summarizer:
     enabled: true
     scrap_interval: 0.5
     timeout: 10.0
+  subtitle:
+    enabled: true
+    auto_c_suffix: false
+    filename_extensions:
+    - .srt
+    - .vtt
+    - .ass
+    - .ssa
+    - .sbv
+    - .idx
+    - .sub
 translator:
   target_lang: zh-CN
   engine:

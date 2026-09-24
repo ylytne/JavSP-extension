@@ -88,7 +88,56 @@ def truncate_title_for_path_length(
     while len(title) > 5 and calc_len(title + "…") > max_len:
         title = title[:-2]
 
-    return title + "…"
+_SLICE_POSTFIX_RE = re.compile(
+    r"[-_.\s]*(cd|disc|disk|part)?[-_.\s]*([a-z]|\d+)$", re.IGNORECASE
+)
+
+
+def get_clean_movie_stem(stem: str) -> str:
+    """去除分片标记（如 -cd1, _part2, -A）以提取影片主名。"""
+    cleaned = _SLICE_POSTFIX_RE.sub("", stem).strip()
+    return cleaned if cleaned else stem
+
+
+def find_associated_subtitles(
+    video_path: Path,
+    sub_extensions: Sequence[str],
+) -> list[tuple[Path, str]]:
+    """查找与给定视频文件同目录且同名的字幕文件（支持语言/变体标识后缀）。
+
+    Args:
+        video_path: 视频文件绝对路径或虚拟路径。
+        sub_extensions: 支持的字幕扩展名列表（如 ['.srt', '.vtt', '.ass', ...])。
+
+    Returns:
+        匹配到的字幕列表，每项为 (原字幕绝对路径, 相对视频主名的扩展后缀如 '.srt' 或 '.zh.srt')。
+    """
+    parent = video_path.parent
+    if not parent.is_dir():
+        return []
+
+    video_stem = video_path.stem
+    valid_exts = set(ext.lower() for ext in sub_extensions)
+    results: list[tuple[Path, str]] = []
+
+    try:
+        for f in parent.iterdir():
+            if not f.is_file():
+                continue
+            if f.suffix.lower() not in valid_exts:
+                continue
+            f_name_lower = f.name.lower()
+            v_stem_lower = video_stem.lower()
+
+            if f_name_lower == f"{v_stem_lower}{f.suffix.lower()}":
+                results.append((f, f.suffix))
+            elif f_name_lower.startswith(f"{v_stem_lower}."):
+                remainder = f.name[len(video_stem):]
+                results.append((f, remainder))
+    except OSError as err:
+        logger.warning("扫描字幕文件异常 (%s): %s", parent, err)
+
+    return results
 
 
 def organize_movie(
@@ -134,6 +183,28 @@ def organize_movie(
     clean_movie_actresses(metadata)
     info_dict = metadata.get_info_dict()
 
+    sub_config = config.summarizer.subtitle
+    sub_enabled = sub_config.enabled
+    sub_extensions = sub_config.filename_extensions
+
+    # 若开启外挂字幕自动标记中字 (-C)，且检测到同名字幕，自动提升 hard_sub = True
+    if sub_enabled and sub_config.auto_c_suffix and not hard_sub:
+        has_sub = False
+        for f_str in files:
+            p = Path(f_str).resolve()
+            if find_associated_subtitles(p, sub_extensions):
+                has_sub = True
+                break
+        if not has_sub and len(files) > 1:
+            clean_stems = list(dict.fromkeys(get_clean_movie_stem(Path(f).stem) for f in files))
+            if len(clean_stems) == 1 and clean_stems[0]:
+                first_parent = Path(files[0]).resolve().parent
+                dummy_video_path = first_parent / f"{clean_stems[0]}.mp4"
+                if find_associated_subtitles(dummy_video_path, sub_extensions):
+                    has_sub = True
+        if has_sub:
+            hard_sub = True
+
     # 处理 -C / -U 额外属性后缀，确保重命名及输出文件夹中保留标识
     attr_suffix = ""
     if hard_sub and uncensored:
@@ -173,14 +244,18 @@ def organize_movie(
     base_name = config.summarizer.path.basename_pattern.format_map(SafeDict(cleaned_dict))
     base_name = replace_illegal_chars(base_name)
 
-    # 1. 移动或硬链接视频文件
+    # 1. 移动或硬链接视频文件与关联字幕文件
     if on_step:
-        on_step("ORGANIZING_FILES", "正在归档与移动视频文件")
+        on_step(
+            "ORGANIZING_FILES",
+            "正在归档与移动视频及字幕文件" if sub_enabled else "正在归档与移动视频文件",
+        )
 
     should_move = config.summarizer.move_files
     use_hardlink = config.summarizer.path.hard_link
 
     old_parents = set(Path(f).parent for f in files)
+    processed_sub_srcs: set[Path] = set()
 
     for i, file_path_str in enumerate(files, start=1):
         src_path = Path(file_path_str).resolve()
@@ -193,12 +268,14 @@ def organize_movie(
         dest_filename = f"{base_name}{slice_suffix}{ext}"
         dest_path = target_dir / dest_filename
 
+        dest_base_stem = f"{base_name}{slice_suffix}"
         # 防覆盖检查
         if dest_path.exists() and dest_path != src_path:
             # 追加数字后缀避免覆盖
             counter = 1
             while dest_path.exists():
-                dest_filename = f"{base_name}{slice_suffix}_{counter}{ext}"
+                dest_base_stem = f"{base_name}{slice_suffix}_{counter}"
+                dest_filename = f"{dest_base_stem}{ext}"
                 dest_path = target_dir / dest_filename
                 counter += 1
 
@@ -214,6 +291,72 @@ def organize_movie(
             else:
                 # 既不移动也不硬链，仅复制或就地保留
                 shutil.copy2(src_path, dest_path)
+
+        # 归档该视频文件关联的字幕文件
+        if sub_enabled:
+            associated_subs = find_associated_subtitles(src_path, sub_extensions)
+            for sub_src, remainder in associated_subs:
+                sub_src_resolved = sub_src.resolve()
+                if sub_src_resolved in processed_sub_srcs:
+                    continue
+                processed_sub_srcs.add(sub_src_resolved)
+                old_parents.add(sub_src_resolved.parent)
+
+                sub_dest_filename = f"{dest_base_stem}{remainder}"
+                sub_dest_path = target_dir / sub_dest_filename
+
+                if sub_dest_path != sub_src_resolved:
+                    if sub_dest_path.exists():
+                        try:
+                            sub_dest_path.unlink()
+                        except OSError:
+                            pass
+                    if use_hardlink:
+                        try:
+                            os.link(sub_src_resolved, sub_dest_path)
+                        except OSError as e:
+                            logger.warning("创建字幕硬链接失败 (%s)，回退至文件复制", e)
+                            shutil.copy2(sub_src_resolved, sub_dest_path)
+                    elif should_move:
+                        shutil.move(sub_src_resolved, sub_dest_path)
+                    else:
+                        shutil.copy2(sub_src_resolved, sub_dest_path)
+                    logger.info("已归档字幕: %s -> %s", sub_src_resolved.name, sub_dest_filename)
+
+    # 处理多分片视频可能存在的总字幕 (例如 IPX-111.srt 对应 IPX-111-cd1.mp4, IPX-111-cd2.mp4)
+    if sub_enabled and len(files) > 1:
+        clean_stems = list(dict.fromkeys(get_clean_movie_stem(Path(f).stem) for f in files))
+        if len(clean_stems) == 1 and clean_stems[0]:
+            first_parent = Path(files[0]).resolve().parent
+            dummy_video_path = first_parent / f"{clean_stems[0]}.mp4"
+            common_subs = find_associated_subtitles(dummy_video_path, sub_extensions)
+            for sub_src, remainder in common_subs:
+                sub_src_resolved = sub_src.resolve()
+                if sub_src_resolved in processed_sub_srcs:
+                    continue
+                processed_sub_srcs.add(sub_src_resolved)
+                old_parents.add(sub_src_resolved.parent)
+
+                sub_dest_filename = f"{base_name}{remainder}"
+                sub_dest_path = target_dir / sub_dest_filename
+
+                if sub_dest_path != sub_src_resolved:
+                    if sub_dest_path.exists():
+                        try:
+                            sub_dest_path.unlink()
+                        except OSError:
+                            pass
+                    if use_hardlink:
+                        try:
+                            os.link(sub_src_resolved, sub_dest_path)
+                        except OSError as e:
+                            logger.warning("创建字幕硬链接失败 (%s)，回退至文件复制", e)
+                            shutil.copy2(sub_src_resolved, sub_dest_path)
+                    elif should_move:
+                        shutil.move(sub_src_resolved, sub_dest_path)
+                    else:
+                        shutil.copy2(sub_src_resolved, sub_dest_path)
+                    logger.info("已归档多分片共享字幕: %s -> %s", sub_src_resolved.name, sub_dest_filename)
 
     # 如果移动了文件，且原父目录变为空目录，则清理原空文件夹
     if should_move:

@@ -85,6 +85,12 @@ export interface SummarizerActressAvatarConfig {
   timeout: number;
 }
 
+export interface SummarizerSubtitleConfig {
+  enabled: boolean;
+  auto_c_suffix?: boolean;
+  filename_extensions?: string[];
+}
+
 export interface SummarizerConfig {
   move_files: boolean;
   path: SummarizerPathConfig;
@@ -96,6 +102,7 @@ export interface SummarizerConfig {
   fanart: SummarizerFanartConfig;
   extra_fanarts: SummarizerExtraFanartsConfig;
   actress_avatar?: SummarizerActressAvatarConfig;
+  subtitle?: SummarizerSubtitleConfig;
 }
 
 export interface TranslatorFieldsConfig {

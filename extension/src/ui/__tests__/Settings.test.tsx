@@ -109,6 +109,11 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
         max_count: 10,
         uniform_sampling: true,
       },
+      subtitle: {
+        enabled: true,
+        auto_c_suffix: false,
+        filename_extensions: [".srt", ".vtt", ".ass", ".ssa", ".sbv", ".idx", ".sub"],
+      },
     },
     translator: {
       target_lang: "zh-CN",
@@ -251,6 +256,34 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
     expect(container.textContent).toContain("创建硬链接");
     const folderPatternInput = container.querySelector("input[value='{actress}/{num}']") as HTMLInputElement;
     expect(folderPatternInput).not.toBeNull();
+  });
+
+  it("SummarizerTab 应能正确展示并切换同名字幕归档与 auto_c_suffix 配置", async () => {
+    let currentConfig = JSON.parse(JSON.stringify(mockConfig));
+    const updateForm = vi.fn((updater) => {
+      currentConfig = updater(currentConfig);
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<SummarizerTab formConfig={currentConfig} updateForm={updateForm} />);
+    });
+
+    expect(container.textContent).toContain("自动归档同名字幕文件");
+    expect(container.textContent).toContain("外挂字幕自动标记为中字 (-C)");
+
+    // 找到 auto_c_suffix 复选框并点击切换
+    const autoCCheckbox = container.querySelector(
+      "input[data-testid='auto-c-suffix-checkbox']"
+    ) as HTMLInputElement;
+    expect(autoCCheckbox).not.toBeNull();
+    expect(autoCCheckbox.checked).toBe(false);
+
+    await act(async () => {
+      autoCCheckbox.click();
+    });
+    expect(updateForm).toHaveBeenCalled();
+    expect(currentConfig.summarizer.subtitle.auto_c_suffix).toBe(true);
   });
 
   it("MediaTab 应能正确渲染封面裁剪比例与剧照配置", async () => {

@@ -205,6 +205,73 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
           </div>
         </div>
       </div>
+
+      {/* 字幕文件归档设置 */}
+      <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xs font-bold text-slate-700">自动归档同名字幕文件</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              归档时自动识别同目录下的同名字幕（.srt .vtt .ass .ssa .sbv .idx .sub 及语言后缀），一并归档并重命名
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+            <input
+              type="checkbox"
+              data-testid="subtitle-enabled-toggle"
+              checked={formConfig.summarizer.subtitle?.enabled ?? true}
+              onChange={(e) =>
+                updateForm((cfg) => {
+                  if (!cfg.summarizer.subtitle) {
+                    cfg.summarizer.subtitle = {
+                      enabled: e.target.checked,
+                      auto_c_suffix: false,
+                      filename_extensions: [".srt", ".vtt", ".ass", ".ssa", ".sbv", ".idx", ".sub"],
+                    };
+                  } else {
+                    cfg.summarizer.subtitle.enabled = e.target.checked;
+                  }
+                  return cfg;
+                })
+              }
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+
+        {/* 仅在主开关开启时展示 auto_c_suffix */}
+        {(formConfig.summarizer.subtitle?.enabled ?? true) && (
+          <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium text-slate-700">外挂字幕自动标记为中字 (-C)</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                检测到同名外挂字幕时，自动将影片标记为中文字幕并在番号及文件名后追加 -C，生成中字水印海报
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              data-testid="auto-c-suffix-checkbox"
+              checked={formConfig.summarizer.subtitle?.auto_c_suffix ?? false}
+              onChange={(e) =>
+                updateForm((cfg) => {
+                  if (!cfg.summarizer.subtitle) {
+                    cfg.summarizer.subtitle = {
+                      enabled: true,
+                      auto_c_suffix: e.target.checked,
+                      filename_extensions: [".srt", ".vtt", ".ass", ".ssa", ".sbv", ".idx", ".sub"],
+                    };
+                  } else {
+                    cfg.summarizer.subtitle.auto_c_suffix = e.target.checked;
+                  }
+                  return cfg;
+                })
+              }
+              className="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer ml-3 shrink-0"
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
