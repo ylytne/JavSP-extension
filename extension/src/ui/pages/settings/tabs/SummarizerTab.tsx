@@ -1,5 +1,12 @@
 import React from "react";
 import { FullAppConfig } from "../types";
+import {
+  FOLDER_VARS,
+  BASENAME_VARS,
+  VariablePillSelector,
+  FolderBreadcrumbPreview,
+  DiskStructurePreview,
+} from "../components/TemplatePreview";
 
 interface SummarizerTabProps {
   formConfig: FullAppConfig;
@@ -79,69 +86,86 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
         </div>
       </div>
 
-      {/* 输出路径模板 */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-xs font-bold text-slate-700">
-            整理后输出文件夹路径模板 (output_folder_pattern)
-          </label>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-400">点击插入变量:</span>
-            {["{actress}", "{num}", "{title}", "{publisher}"].map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => insertTemplateVar("output_folder_pattern", v)}
-                className="px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-[10px] font-mono rounded text-slate-600 border border-slate-200 cursor-pointer"
-              >
-                {v}
-              </button>
-            ))}
+      {/* 输出路径模板与文件名配置卡片 */}
+      <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-4">
+        {/* 输出路径模板 */}
+        <div className="space-y-1.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div>
+              <label className="text-xs font-bold text-slate-700">
+                整理后输出文件夹路径模板 (output_folder_pattern)
+              </label>
+              <div className="text-[11px] text-slate-500 leading-relaxed mt-0.5 space-y-0.5">
+                <p>定义影片归档目录与子文件夹层级。使用斜杠 <code className="text-indigo-600 font-mono font-semibold">/</code> 分隔多级子目录：</p>
+                <div className="text-[10.5px] text-slate-400 pl-1 space-y-0.5">
+                  <div>
+                    • <strong className="text-slate-600 font-medium">相对路径</strong>（如 <code className="text-indigo-600 font-mono">#整理完成/{"{actress}"}/...</code>）：自动存放在每次扫描整理的目标目录（如 <code className="font-mono text-slate-500">{formConfig.scanner.input_directory || "D:/download"}/#整理完成/...</code>）中；
+                  </div>
+                  <div>
+                    • <strong className="text-slate-600 font-medium">绝对路径</strong>（如 <code className="text-indigo-600 font-mono">E:/MOVIES/{"{actress}"}/...</code>）：跨盘统一归档至指定磁盘或目录，不受扫描目录所在盘符影响。
+                  </div>
+                </div>
+              </div>
+            </div>
+            <VariablePillSelector
+              vars={FOLDER_VARS}
+              onInsert={(token) => insertTemplateVar("output_folder_pattern", token)}
+            />
           </div>
+          <input
+            type="text"
+            value={formConfig.summarizer.path.output_folder_pattern}
+            onChange={(e) =>
+              updateForm((cfg) => {
+                cfg.summarizer.path.output_folder_pattern = e.target.value;
+                return cfg;
+              })
+            }
+            placeholder="#整理完成/{actress}/[{num}] {title}"
+            className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          {/* 实时目录层级效果预览 */}
+          <FolderBreadcrumbPreview
+            pattern={formConfig.summarizer.path.output_folder_pattern}
+            baseDirectory={formConfig.scanner.input_directory}
+          />
         </div>
-        <input
-          type="text"
-          value={formConfig.summarizer.path.output_folder_pattern}
-          onChange={(e) =>
-            updateForm((cfg) => {
-              cfg.summarizer.path.output_folder_pattern = e.target.value;
-              return cfg;
-            })
-          }
-          className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
 
-      {/* 主文件名模板 */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-xs font-bold text-slate-700">
-            主文件名前缀模板 (basename_pattern)
-          </label>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-400">点击插入变量:</span>
-            {["{num}", "{title}"].map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => insertTemplateVar("basename_pattern", v)}
-                className="px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-[10px] font-mono rounded text-slate-600 border border-slate-200 cursor-pointer"
-              >
-                {v}
-              </button>
-            ))}
+        {/* 主文件名模板 */}
+        <div className="space-y-1.5 pt-2 border-t border-slate-200/70">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div>
+              <label className="text-xs font-bold text-slate-700">
+                主文件名前缀模板 (basename_pattern)
+              </label>
+              <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                定义目标目录内视频、NFO、海报及字幕的主文件名（不含扩展名及 CD1 分片标记），推荐保持 <code className="text-indigo-600 font-mono font-semibold">{"{num}"}</code>。
+              </p>
+            </div>
+            <VariablePillSelector
+              vars={BASENAME_VARS}
+              onInsert={(token) => insertTemplateVar("basename_pattern", token)}
+            />
           </div>
+          <input
+            type="text"
+            value={formConfig.summarizer.path.basename_pattern}
+            onChange={(e) =>
+              updateForm((cfg) => {
+                cfg.summarizer.path.basename_pattern = e.target.value;
+                return cfg;
+              })
+            }
+            placeholder="{num}"
+            className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
         </div>
-        <input
-          type="text"
-          value={formConfig.summarizer.path.basename_pattern}
-          onChange={(e) =>
-            updateForm((cfg) => {
-              cfg.summarizer.path.basename_pattern = e.target.value;
-              return cfg;
-            })
-          }
-          className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+
+        {/* 综合落盘文件结构动态模拟效果卡片 */}
+        <DiskStructurePreview
+          folderPattern={formConfig.summarizer.path.output_folder_pattern}
+          basenamePattern={formConfig.summarizer.path.basename_pattern}
+          baseDirectory={formConfig.scanner.input_directory}
         />
       </div>
 
@@ -164,6 +188,9 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
             }
             className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+          <p className="text-[10px] text-slate-400 mt-1 leading-tight">
+            防止 Windows 路径超过 260 字符限制而截短标题
+          </p>
         </div>
 
         <div>
@@ -183,6 +210,9 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
             }
             className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+          <p className="text-[10px] text-slate-400 mt-1 leading-tight">
+            多女优作品在路径中最多保留的演员数量
+          </p>
         </div>
 
         <div>
@@ -199,10 +229,13 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
                   return cfg;
                 })
               }
-              className="rounded text-indigo-600 focus:ring-indigo-500"
+              className="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
             />
             <span className="text-xs text-slate-600 font-medium">自动清洗标题末尾</span>
           </div>
+          <p className="text-[10px] text-slate-400 mt-1 leading-tight">
+            若标题末尾附带演员姓名则自动剔除，保持标题纯净
+          </p>
         </div>
       </div>
 

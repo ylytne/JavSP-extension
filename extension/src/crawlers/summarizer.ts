@@ -27,10 +27,22 @@ export function removeTrailingActorName(title: string, actors: string[]): string
   return match ? match[1].trim() : title;
 }
 
+/**
+ * 清洗女优名称，剥离括号内的别名/旧艺名/译名 (如 "めぐり（藤浦めぐ）" -> "めぐり")
+ */
+export function cleanActressName(name: string): string {
+  if (!name) return "";
+  const trimmed = name.trim();
+  // 移除半角与全角圆括号、方括号及其中的别名内容
+  const cleaned = trimmed.replace(/\s*[（\(［\[][^（\(［\[）\)］\]]*[）\)］\]]/g, "").trim();
+  return cleaned || trimmed;
+}
+
 export interface SummarizerOptions {
   hardSub?: boolean;
   uncensored?: boolean;
   useJavdbCover?: "fallback" | "never";
+  cleanActressAlias?: boolean;
 }
 
 /**
@@ -259,19 +271,22 @@ export function summarizeMovieResults(
   // 6.1 女优名与头像（单源整套独占采纳：JavBus > JavDB > 其他站点按 priorityOrder）
   // 严禁跨站点合并演员列表求并集，否则不同站点间的中日双语译名会导致同一演员重复添加
   // -------------------------------------------------------------
+  const shouldCleanActress = flags.cleanActressAlias ?? true;
   const actressSourceOrder = [
     ...(siteData["javbus"]?.actress?.length ? ["javbus"] : []),
     ...(siteData["javdb"]?.actress?.length ? ["javdb"] : []),
     ...priorityOrder.filter((s) => s !== "javbus" && s !== "javdb"),
   ];
+  let rawSelectedActors: string[] = [];
   for (const site of actressSourceOrder) {
     const data = siteData[site];
     if (data?.actress && data.actress.length > 0) {
+      rawSelectedActors = [...data.actress];
       const cleanActors: string[] = [];
       for (const act of data.actress) {
-        const trimmed = act.trim();
-        if (trimmed && !cleanActors.includes(trimmed)) {
-          cleanActors.push(trimmed);
+        const processed = shouldCleanActress ? cleanActressName(act) : act.trim();
+        if (processed && !cleanActors.includes(processed)) {
+          cleanActors.push(processed);
         }
       }
       if (cleanActors.length > 0) {
@@ -282,10 +297,19 @@ export function summarizeMovieResults(
   }
 
   // 头像字典收集（主要来自 JavBus，按 priorityOrder 吸收）
+  // 同时对头像 Key 进行别名括号清洗，确保与 merged.actress 中的规范主名 1:1 对齐
   for (const site of priorityOrder) {
     const data = siteData[site];
     if (data?.actress_pics) {
-      merged.actress_pics = { ...data.actress_pics, ...merged.actress_pics };
+      const normalizedPics: Record<string, string> = {};
+      for (const [rawName, picUrl] of Object.entries(data.actress_pics)) {
+        if (!picUrl) continue;
+        const targetKey = shouldCleanActress ? cleanActressName(rawName) : rawName.trim();
+        if (targetKey) {
+          normalizedPics[targetKey] = picUrl;
+        }
+      }
+      merged.actress_pics = { ...normalizedPics, ...merged.actress_pics };
     }
   }
 
@@ -345,11 +369,14 @@ export function summarizeMovieResults(
   // -------------------------------------------------------------
   // 9. 清洗标题尾部女优名
   // -------------------------------------------------------------
+  const allActorVariants = Array.from(
+    new Set([...(merged.actress || []), ...rawSelectedActors.map((a) => a.trim()).filter(Boolean)])
+  );
   if (merged.title) {
-    merged.title = removeTrailingActorName(merged.title, merged.actress || []);
+    merged.title = removeTrailingActorName(merged.title, allActorVariants);
   }
   if (merged.ori_title) {
-    merged.ori_title = removeTrailingActorName(merged.ori_title, merged.actress || []);
+    merged.ori_title = removeTrailingActorName(merged.ori_title, allActorVariants);
   }
 
   // -------------------------------------------------------------

@@ -16,7 +16,7 @@ const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
   extraFanartsMaxCount: 0,
   extraFanartsUniformSampling: true,
   extraFanartsTimeout: 10,
-  actressAvatarEnabled: true,
+  actressAvatarEnabled: false,
   actressAvatarInterval: 0.5,
   actressAvatarTimeout: 10,
   includeTrailer: false,

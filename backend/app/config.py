@@ -161,7 +161,7 @@ class SummarizerExtraFanartsConfig(BaseModel):
 
 class SummarizerActressAvatarConfig(BaseModel):
     """女优头像下载与保存配置。"""
-    enabled: bool = True
+    enabled: bool = False
     scrap_interval: float | int | str = 0.5
     timeout: float = 10.0
 

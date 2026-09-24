@@ -242,8 +242,11 @@ def test_organizer_hardsub_and_step_callback(tmp_path: Path):
     assert any(step == "CROPPING_POSTER" for step, _ in steps_recorded)
 
 
-def test_organizer_actress_alias_and_deduplication(tmp_path: Path):
+def test_organizer_actress_alias_and_deduplication(tmp_path: Path, monkeypatch):
     """验证包含中日双语多别名的同一女优在归档目录与 NFO 中能正确去重并保留头像。"""
+    cfg = get_config()
+    monkeypatch.setattr(cfg.summarizer.actress_avatar, "enabled", True)
+
     movie_folder = tmp_path / "in_abf"
     movie_folder.mkdir()
     f1 = movie_folder / "ABF-358.mp4"

@@ -108,7 +108,7 @@ summarizer:
     max_count: 10
     uniform_sampling: true
   actress_avatar:
-    enabled: true
+    enabled: false
     scrap_interval: 0.5
     timeout: 10.0
   subtitle:

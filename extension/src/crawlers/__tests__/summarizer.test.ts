@@ -1,6 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { removeTrailingActorName, summarizeMovieResults } from "../summarizer";
+import { cleanActressName, removeTrailingActorName, summarizeMovieResults } from "../summarizer";
 import { MovieInfo } from "../types";
+
+describe("cleanActressName", () => {
+  it("should remove full-width parentheses with alias", () => {
+    expect(cleanActressName("めぐり（藤浦めぐ）")).toBe("めぐり");
+  });
+
+  it("should remove half-width parentheses with alias", () => {
+    expect(cleanActressName("葵つかさ(葵司)")).toBe("葵つかさ");
+  });
+
+  it("should remove brackets with alias", () => {
+    expect(cleanActressName("安斋らら［RION］")).toBe("安斋らら");
+    expect(cleanActressName("安斋らら[RION]")).toBe("安斋らら");
+  });
+
+  it("should handle spaces around parentheses", () => {
+    expect(cleanActressName("めぐり （藤浦めぐ）")).toBe("めぐり");
+    expect(cleanActressName("  葵つかさ (葵司)  ")).toBe("葵つかさ");
+  });
+
+  it("should not modify normal names without parentheses", () => {
+    expect(cleanActressName("相沢みなみ")).toBe("相沢みなみ");
+    expect(cleanActressName("三上悠亜")).toBe("三上悠亜");
+  });
+
+  it("should keep raw name if only parentheses exist", () => {
+    expect(cleanActressName("（未知女优）")).toBe("（未知女优）");
+  });
+});
 
 describe("removeTrailingActorName", () => {
   it("should remove trailing actress name separated by space", () => {
@@ -263,6 +292,56 @@ describe("summarizeMovieResults", () => {
     const summarized = summarizeMovieResults(siteData, ["airav", "javbus"]);
     expect(summarized.actress).toEqual(["涼森れむ"]);
     expect(summarized.actress_pics).toEqual({ "涼森れむ": "https://javbus.com/remu.jpg" });
+  });
+
+  it("should strip alias parentheses from actress name and align actress_pics keys", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "SOE-999",
+        title: "超高級ソープへようこそ めぐり（藤浦めぐ）",
+        cover: "https://javbus.com/soe999.jpg",
+        actress: ["めぐり（藤浦めぐ）", "葵つかさ(葵司)"],
+        actress_pics: {
+          "めぐり（藤浦めぐ）": "https://javbus.com/meguri.jpg",
+          "葵つかさ(葵司)": "https://javbus.com/aoi.jpg",
+        },
+      },
+    };
+
+    const summarized = summarizeMovieResults(siteData, ["javbus"]);
+
+    // 女优名字切括号
+    expect(summarized.actress).toEqual(["めぐり", "葵つかさ"]);
+    // 头像 Key 自动对齐重命名为主艺名
+    expect(summarized.actress_pics).toEqual({
+      めぐり: "https://javbus.com/meguri.jpg",
+      葵つかさ: "https://javbus.com/aoi.jpg",
+    });
+    // 标题尾部女优名（包含带括号的原名）应被成功清洗
+    expect(summarized.title).toBe("超高級ソープへようこそ");
+  });
+
+  it("should preserve alias parentheses when cleanActressAlias is false", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "SOE-999",
+        title: "超高級ソープへようこそ めぐり（藤浦めぐ）",
+        cover: "https://javbus.com/soe999.jpg",
+        actress: ["めぐり（藤浦めぐ）"],
+        actress_pics: {
+          "めぐり（藤浦めぐ）": "https://javbus.com/meguri.jpg",
+        },
+      },
+    };
+
+    const summarized = summarizeMovieResults(siteData, ["javbus"], {
+      cleanActressAlias: false,
+    });
+
+    expect(summarized.actress).toEqual(["めぐり（藤浦めぐ）"]);
+    expect(summarized.actress_pics).toEqual({
+      "めぐり（藤浦めぐ）": "https://javbus.com/meguri.jpg",
+    });
   });
 
   it("should throw error if title is missing", () => {

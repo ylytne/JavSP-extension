@@ -1,5 +1,10 @@
 import React from "react";
 import { FullAppConfig } from "../types";
+import {
+  NFO_TITLE_VARS,
+  VariablePillSelector,
+  MediaTitlePreview,
+} from "../components/TemplatePreview";
 
 interface MediaTabProps {
   formConfig: FullAppConfig;
@@ -16,36 +21,38 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
 
   return (
     <div className="space-y-4">
-      {/* NFO 模板 */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-xs font-bold text-slate-700">
-            NFO 影片标题模板 (nfo.title_pattern)
-          </label>
-          <div className="flex items-center gap-1">
-            {["{num}", "{title}", "{censor}"].map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => insertTemplateVar(v)}
-                className="px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-[10px] font-mono rounded text-slate-600 border border-slate-200 cursor-pointer"
-              >
-                {v}
-              </button>
-            ))}
+      {/* NFO 标题模板配置卡片 */}
+      <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-3">
+        <div className="space-y-1.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div>
+              <label className="text-xs font-bold text-slate-700">
+                NFO 影片标题模板 (nfo.title_pattern)
+              </label>
+              <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                写入影片 NFO 的 <code className="text-indigo-600 font-mono font-semibold">&lt;title&gt;</code> 节点。Emby / Jellyfin / Kodi 等媒体中心导入后，海报墙与详情页展示的影视标题以此为准。
+              </p>
+            </div>
+            <VariablePillSelector
+              vars={NFO_TITLE_VARS}
+              onInsert={insertTemplateVar}
+            />
           </div>
+          <input
+            type="text"
+            value={formConfig.summarizer.nfo.title_pattern}
+            onChange={(e) =>
+              updateForm((cfg) => {
+                cfg.summarizer.nfo.title_pattern = e.target.value;
+                return cfg;
+              })
+            }
+            placeholder="{num} {title}"
+            className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          {/* 实时媒体库标题显示效果预览 */}
+          <MediaTitlePreview pattern={formConfig.summarizer.nfo.title_pattern} />
         </div>
-        <input
-          type="text"
-          value={formConfig.summarizer.nfo.title_pattern}
-          onChange={(e) =>
-            updateForm((cfg) => {
-              cfg.summarizer.nfo.title_pattern = e.target.value;
-              return cfg;
-            })
-          }
-          className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
       </div>
 
       {/* 海报与角标 */}
@@ -266,11 +273,11 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={formConfig.summarizer.actress_avatar?.enabled ?? true}
+              checked={formConfig.summarizer.actress_avatar?.enabled ?? false}
               onChange={(e) =>
                 updateForm((cfg) => {
                   if (!cfg.summarizer.actress_avatar) {
-                    cfg.summarizer.actress_avatar = { enabled: true, scrap_interval: 0.5, timeout: 10.0 };
+                    cfg.summarizer.actress_avatar = { enabled: false, scrap_interval: 0.5, timeout: 10.0 };
                   }
                   cfg.summarizer.actress_avatar.enabled = e.target.checked;
                   return cfg;
@@ -283,14 +290,39 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
             </span>
           </div>
           <span className="text-[11px] text-slate-400 font-mono">
-            {(formConfig.summarizer.actress_avatar?.enabled ?? true) ? "已开启" : "已禁用"}
+            {(formConfig.summarizer.actress_avatar?.enabled ?? false) ? "已开启" : "已禁用(推荐)"}
           </span>
         </div>
-        <p className="text-[11px] text-slate-500 leading-snug">
-          由前端扩展在浏览器同源安全环境下下载女优头像，并在后端保存至影片同级目录下的 <code className="text-indigo-600 font-mono">.actors/女优名.jpg</code> 文件夹。Jellyfin / Emby / Kodi 原生完全支持，实现零外网依赖的离线本地头像。
-        </p>
 
-        {(formConfig.summarizer.actress_avatar?.enabled ?? true) && (
+        {/* 说明与注意事项声明 */}
+        <div className="space-y-2 text-[11px] text-slate-600 leading-relaxed">
+          <p>
+            开启后，扩展端会在刮削时下载女优头像，并由后端保存至影片同级目录下的{" "}
+            <code className="text-indigo-600 font-mono font-medium">.actors/女优名.jpg</code> 文件夹中。
+          </p>
+          <div className="bg-amber-50/90 border border-amber-200/90 rounded-lg p-2.5 text-amber-900 space-y-1">
+            <div className="font-semibold text-amber-800 flex items-center gap-1">
+              <span>⚠️ 注意事项与使用建议（默认保持禁用）：</span>
+            </div>
+            <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-900/90 pl-0.5 leading-normal">
+              <li>
+                <strong>重复碎片文件</strong>：开启后会导致每部影片对应目录都会重复下载头像，尽管单张体积很小，但多部影片整理归档后会产生大量零碎的重复图片文件。
+              </li>
+              <li>
+                <strong>画质较差</strong>：头像来源站为 JavBus，其头像图片分辨率与画质较差，不建议直接使用。
+              </li>
+              <li>
+                <strong>推荐管理方式</strong>：建议 Emby / Jellyfin 用户使用开源工具{" "}
+                <code className="bg-amber-100/90 px-1 py-0.5 rounded text-amber-950 font-mono font-bold">
+                  gfriends-inputer
+                </code>{" "}
+                进行统一化管理与高清头像导入。
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {(formConfig.summarizer.actress_avatar?.enabled ?? false) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
               <label className="block text-[11px] font-medium text-slate-600 mb-1">
@@ -304,7 +336,7 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
                 onChange={(e) =>
                   updateForm((cfg) => {
                     if (!cfg.summarizer.actress_avatar) {
-                      cfg.summarizer.actress_avatar = { enabled: true, scrap_interval: 0.5, timeout: 10.0 };
+                      cfg.summarizer.actress_avatar = { enabled: false, scrap_interval: 0.5, timeout: 10.0 };
                     }
                     cfg.summarizer.actress_avatar.scrap_interval = parseFloat(e.target.value) || 0.5;
                     return cfg;
@@ -326,7 +358,7 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
                 onChange={(e) =>
                   updateForm((cfg) => {
                     if (!cfg.summarizer.actress_avatar) {
-                      cfg.summarizer.actress_avatar = { enabled: true, scrap_interval: 0.5, timeout: 10.0 };
+                      cfg.summarizer.actress_avatar = { enabled: false, scrap_interval: 0.5, timeout: 10.0 };
                     }
                     cfg.summarizer.actress_avatar.timeout = parseFloat(e.target.value) || 10.0;
                     return cfg;
