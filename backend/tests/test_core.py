@@ -323,6 +323,68 @@ def test_scanner_strm_file(tmp_path: Path):
     assert results[0].status == "pending"
 
 
+def test_scanner_small_invalid_files_ignored(tmp_path: Path, monkeypatch):
+    """验证子目录下小于阈值的无关/广告/无效小视频不会被错误识别为主影片并引起冲突。"""
+    cfg = get_config()
+    monkeypatch.setattr(cfg.scanner, "minimum_size", 100)
+
+    movie_dir = tmp_path / "PFES-121"
+    movie_dir.mkdir()
+    (movie_dir / "有效文件@PFES-121.mp4").write_bytes(b"x" * 200)
+    (movie_dir / "应该被排除的无效文件.mp4").write_bytes(b"x" * 50)
+    (movie_dir / "应该被排除的无效文件2.mp4").write_bytes(b"x" * 40)
+    (movie_dir / "广告.txt").write_text("ad info", encoding="utf-8")
+
+    results = scan_directory(tmp_path)
+    assert len(results) == 1
+    assert results[0].dvdid == "PFES-121"
+    assert results[0].status == "pending"
+    assert results[0].errorMsg is None
+    assert len(results[0].files) == 1
+    assert results[0].files[0].endswith("有效文件@PFES-121.mp4")
+
+
+def test_scanner_small_slice_merged(tmp_path: Path, monkeypatch):
+    """验证多分片影片中体积小于阈值的子片仍能正常合流为多分片影片。"""
+    cfg = get_config()
+    monkeypatch.setattr(cfg.scanner, "minimum_size", 100)
+
+    movie_dir = tmp_path / "incoming_slices"
+    movie_dir.mkdir()
+    f1 = movie_dir / "IPX-177-cd1.mp4"
+    f2 = movie_dir / "IPX-177-cd2.mp4"
+    f1.write_bytes(b"x" * 200)  # >= 100
+    f2.write_bytes(b"x" * 50)   # < 100
+
+    results = scan_directory(movie_dir)
+    assert len(results) == 1
+    assert results[0].dvdid == "IPX-177"
+    assert results[0].status == "pending"
+    assert len(results[0].files) == 2
+    assert results[0].files[0].endswith("IPX-177-cd1.mp4")
+    assert results[0].files[1].endswith("IPX-177-cd2.mp4")
+
+
+def test_scanner_small_trailer_does_not_break_movie(tmp_path: Path, monkeypatch):
+    """验证同目录下带有番号特征但小于阈值的预告片/样片不会导致主影片分片冲突报错。"""
+    cfg = get_config()
+    monkeypatch.setattr(cfg.scanner, "minimum_size", 100)
+
+    movie_dir = tmp_path / "incoming_trailer"
+    movie_dir.mkdir()
+    f_main = movie_dir / "IPX-177.mp4"
+    f_trailer = movie_dir / "IPX-177-trailer.mp4"
+    f_main.write_bytes(b"x" * 200)      # >= 100
+    f_trailer.write_bytes(b"x" * 50)   # < 100
+
+    results = scan_directory(movie_dir)
+    assert len(results) == 1
+    assert results[0].dvdid == "IPX-177"
+    assert results[0].status == "pending"
+    assert len(results[0].files) == 1
+    assert results[0].files[0].endswith("IPX-177.mp4")
+
+
 def test_nfo_unknown_placeholder_safe(monkeypatch):
     cfg = get_config()
     monkeypatch.setattr(cfg.summarizer.nfo, "custom_genres_fields", ["{genre}", "{custom_unknown_tag}"])

@@ -24,6 +24,46 @@ def re_escape(s: str) -> str:
     return s.translate(_SPECIAL_CHARS_MAP)
 
 
+def try_merge_slices(files: list[str]) -> list[str] | None:
+    """尝试将同一目录下的多个文件按多分片规则验证并排序。
+
+    Args:
+        files: 待验证的文件路径列表。
+
+    Returns:
+        若符合多分片规则，返回按分片顺序排好序的文件列表；否则返回 None。
+    """
+    if len(files) <= 1:
+        return files
+
+    # 检查是否位于不同目录（不同目录的同番号文件视为冲突）
+    parent_dirs = set(os.path.dirname(f) for f in files)
+    if len(parent_dirs) > 1:
+        return None
+
+    basenames = [os.path.basename(f) for f in files]
+    prefix = os.path.commonprefix(basenames)
+    try:
+        pattern_expr = re_escape(prefix) + r"\s*([a-z\d])\s*"
+        pattern = re.compile(pattern_expr, flags=re.IGNORECASE)
+    except re.error:
+        return None
+
+    remaining = [pattern.sub(r"\1", b).lower() for b in basenames]
+    postfixes = [r[1:] for r in remaining]
+    slices = [r[0] for r in remaining]
+
+    if len(set(postfixes)) != 1 or len(slices) != len(set(slices)):
+        return None
+
+    sorted_slices = sorted(slices)
+    first, last = sorted_slices[0], sorted_slices[-1]
+    if first not in ("0", "1", "a") or (ord(last) != (ord(first) + len(sorted_slices) - 1)):
+        return None
+
+    return [files[slices.index(s)] for s in sorted_slices]
+
+
 def scan_directory(
     root_dir: str | Path,
     on_progress: Callable[[int, int], None] | None = None,
@@ -105,13 +145,33 @@ def scan_directory(
                 on_progress(scanned_file_counter, len(avid_files_map))
 
     # 处理多分片影片中体积小于阈值的子分片文件
-    for name, s_files in list(small_videos.items()):
+    # 仅从文件名推测番号，绝不向上推测父目录（防止将同目录下的预览/广告/无效小视频误识别为主影片番号）
+    avid_small_candidates: dict[str, list[str]] = {}
+    for name, s_files in small_videos.items():
+        dvdid = get_id(name)
+        cid = get_cid(name)
+        avid = cid if cid else dvdid
         for sf in s_files:
-            dvdid = get_id(sf, stop_dir=root_path)
-            cid = get_cid(sf)
-            avid = cid if cid else dvdid
-            if avid and avid in avid_files_map:
-                avid_files_map[avid].append(sf)
+            if avid:
+                if avid in avid_files_map:
+                    avid_small_candidates.setdefault(avid, []).append(sf)
+            else:
+                # 仅当文件名未包含番号时，才检查同目录下是否存在已识别番号的主影片（应对类似 cd1, cd2 但无番号的场景）
+                sf_dir = os.path.dirname(sf)
+                for m_avid, m_files in avid_files_map.items():
+                    if any(os.path.dirname(mf) == sf_dir for mf in m_files):
+                        avid_small_candidates.setdefault(m_avid, []).append(sf)
+
+    for avid, candidates in avid_small_candidates.items():
+        # 去重并按文件名排序，确保 cd1, cd2 顺序递增尝试
+        unique_candidates = sorted(set(candidates), key=lambda p: os.path.basename(p).lower())
+        current_files = avid_files_map[avid]
+        for sf in unique_candidates:
+            # 只有当小视频文件与已有影片文件能成功构成连续分片时才合入
+            merged = try_merge_slices([*current_files, sf])
+            if merged is not None:
+                current_files = merged
+        avid_files_map[avid] = current_files
 
     # 多分片智能合并与排序
     non_slice_dup: dict[str, list[str]] = {}
@@ -119,40 +179,12 @@ def scan_directory(
         if len(files) == 1:
             continue
 
-        # 检查是否位于不同目录（不同目录的同番号文件视为冲突）
-        parent_dirs = set(os.path.dirname(f) for f in files)
-        if len(parent_dirs) > 1:
+        merged = try_merge_slices(files)
+        if merged is not None:
+            avid_files_map[avid] = merged
+        else:
             non_slice_dup[avid] = files
             del avid_files_map[avid]
-            continue
-
-        basenames = [os.path.basename(f) for f in files]
-        prefix = os.path.commonprefix(basenames)
-        try:
-            pattern_expr = re_escape(prefix) + r"\s*([a-z\d])\s*"
-            pattern = re.compile(pattern_expr, flags=re.IGNORECASE)
-        except re.error:
-            del avid_files_map[avid]
-            continue
-
-        remaining = [pattern.sub(r"\1", b).lower() for b in basenames]
-        postfixes = [r[1:] for r in remaining]
-        slices = [r[0] for r in remaining]
-
-        if len(set(postfixes)) != 1 or len(slices) != len(set(slices)):
-            non_slice_dup[avid] = files
-            del avid_files_map[avid]
-            continue
-
-        sorted_slices = sorted(slices)
-        first, last = sorted_slices[0], sorted_slices[-1]
-        if first not in ("0", "1", "a") or (ord(last) != (ord(first) + len(sorted_slices) - 1)):
-            non_slice_dup[avid] = files
-            del avid_files_map[avid]
-            continue
-
-        mapped_files = [files[slices.index(s)] for s in sorted_slices]
-        avid_files_map[avid] = mapped_files
 
     # 构造 ScanMovieItem 结果对象
     results: list[ScanMovieItem] = []
