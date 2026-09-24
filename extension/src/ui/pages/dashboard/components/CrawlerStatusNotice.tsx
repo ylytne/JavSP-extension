@@ -60,7 +60,8 @@ export const CrawlerStatusNotice: React.FC<CrawlerStatusNoticeProps> = ({ crawle
       <div className="text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200/70 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 leading-relaxed">
         <Info size={13} className="shrink-0 text-amber-600" />
         <span>
-          在开启刮削任务前，建议手动访问一次以上网站（可直接点击上方标签直达）的任意影片详情页，通过年龄认证和CF人机认证，确保当前浏览器环境可正常使用以上网站。
+          在开启刮削任务前，建议手动访问一次以上网站（可直接点击上方标签直达）的任意影片详情页，通过年龄认证和CF人机认证，确保当前浏览器环境可正常使用以上网站。<br/>
+          工作时请不要关闭本页面。
         </span>
       </div>
     </div>

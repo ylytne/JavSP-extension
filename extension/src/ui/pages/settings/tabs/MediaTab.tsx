@@ -48,57 +48,6 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
         />
       </div>
 
-      {/* 预告视频链接写入设置 (<trailer>) */}
-      <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={formConfig.summarizer.nfo.include_trailer ?? false}
-              onChange={(e) =>
-                updateForm((cfg) => {
-                  cfg.summarizer.nfo.include_trailer = e.target.checked;
-                  return cfg;
-                })
-              }
-              className="rounded text-indigo-600 focus:ring-indigo-500"
-            />
-            <span className="text-xs font-bold text-slate-800">
-              写入预告视频链接到 NFO (&lt;trailer&gt;)
-            </span>
-          </div>
-          <span className={`text-[11px] font-mono ${
-            (formConfig.summarizer.nfo.include_trailer ?? false)
-              ? "text-amber-600 font-semibold"
-              : "text-slate-400"
-          }`}>
-            {(formConfig.summarizer.nfo.include_trailer ?? false) ? "已开启 (有风险)" : "已禁用 (推荐)"}
-          </span>
-        </div>
-
-        {/* 醒目风险提示框 */}
-        <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg text-amber-900 text-[11px] space-y-1.5 leading-relaxed">
-          <div className="flex items-center gap-1.5 font-bold text-amber-950">
-            <span className="text-sm">⚠️</span>
-            <span>高危风险与不稳定性警示：</span>
-          </div>
-          <ul className="list-disc list-inside space-y-1 text-amber-900/90 pl-1">
-            <li>
-              <strong>切片流或在线全片风险</strong>：部分站点（如 AirAV）抓取到的视频流实为第三方在线播放站点的 m3u8 切片流，甚至是在线全片流，并非官方剪辑的 Sample 预告片；
-            </li>
-            <li>
-              <strong>时效性与死链</strong>：第三方在线流通常带有防盗链鉴权、时效 Token 或动态 IP 绑定，数天后极易彻底失效（403/404），相关域名亦常遭 GFW 封锁；
-            </li>
-            <li>
-              <strong>媒体服务器卡死</strong>：在 Jellyfin / Emby 中，若开启了“影院模式”（正片前播放预告片）或 TV 端的自动背景预览，遇到无法连通的 m3u8 时可能导致<strong>正片播放卡死 30~60 秒甚至抛出播放错误</strong>。
-            </li>
-          </ul>
-          <p className="text-[10.5px] text-amber-800 pt-0.5 font-medium">
-            💡 <strong>强烈建议保持禁用</strong>。直接抓取预告片/全片视频到本地不是本项目的目标，本项目的目标仅限于刮削信息。如需预告片，推荐在影片同级目录下手动放置本地离线文件（如 <code className="font-mono bg-amber-100/60 px-1 py-0.5 rounded">movie-trailer.mp4</code>）。
-          </p>
-        </div>
-      </div>
-
       {/* 海报与角标 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 space-y-2">
@@ -411,6 +360,57 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
             </div>
           </div>
         )}
+      </div>
+
+      {/* 预告视频链接写入设置 (<trailer>) */}
+      <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={formConfig.summarizer.nfo.include_trailer ?? false}
+              onChange={(e) =>
+                updateForm((cfg) => {
+                  cfg.summarizer.nfo.include_trailer = e.target.checked;
+                  return cfg;
+                })
+              }
+              className="rounded text-indigo-600 focus:ring-indigo-500"
+            />
+            <span className="text-xs font-bold text-slate-800">
+              写入预告视频链接到 NFO (&lt;trailer&gt;)
+            </span>
+          </div>
+          <span className={`text-[11px] font-mono ${
+            (formConfig.summarizer.nfo.include_trailer ?? false)
+              ? "text-amber-600 font-semibold"
+              : "text-slate-400"
+          }`}>
+            {(formConfig.summarizer.nfo.include_trailer ?? false) ? "已开启 (有风险)" : "已禁用 (推荐)"}
+          </span>
+        </div>
+
+        {/* 醒目风险提示框 */}
+        <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg text-amber-900 text-[11px] space-y-1.5 leading-relaxed">
+          <div className="flex items-center gap-1.5 font-bold text-amber-950">
+            <span className="text-sm">⚠️</span>
+            <span>高危风险与不稳定性警示：</span>
+          </div>
+          <ul className="list-disc list-inside space-y-1 text-amber-900/90 pl-1">
+            <li>
+              <strong>切片流或在线全片风险</strong>：部分站点（如 AirAV）抓取到的视频流实为第三方在线播放站点的 m3u8 切片流，甚至是在线全片流，并非官方剪辑的 Sample 预告片；
+            </li>
+            <li>
+              <strong>时效性与死链</strong>：第三方在线流通常带有防盗链鉴权、时效 Token 或动态 IP 绑定，数天后极易彻底失效（403/404），相关域名亦常遭 GFW 封锁；
+            </li>
+            <li>
+              <strong>媒体服务器卡死</strong>：在 Jellyfin / Emby 中，若开启了“影院模式”（正片前播放预告片）或 TV 端的自动背景预览，遇到无法连通的 m3u8 时可能导致<strong>正片播放卡死 30~60 秒甚至抛出播放错误</strong>。
+            </li>
+          </ul>
+          <p className="text-[10.5px] text-amber-800 pt-0.5 font-medium">
+            💡 <strong>强烈建议保持禁用</strong>。直接抓取预告片/全片视频到本地不是本项目的目标，本项目的目标仅限于刮削信息。如需预告片，推荐在影片同级目录下手动放置本地离线文件（如 <code className="font-mono bg-amber-100/60 px-1 py-0.5 rounded">movie-trailer.mp4</code>）。
+          </p>
+        </div>
       </div>
     </div>
   );
