@@ -56,6 +56,25 @@ def replace_illegal_chars(name: str) -> str:
     return name
 
 
+_PUNC_CHARS = (
+    ' !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
+    '！＂＃％＆＇（）＊，－．／：；？＠［＼］＿｛｝｟｠｡｢｣､･'
+)
+_PUNC_PATTERN = re.compile(r'.*?[' + re.escape(_PUNC_CHARS) + r']')
+
+
+def split_by_punc(s: str) -> list[str]:
+    """将字符串按照常见全角/半角标点符号进行断句分割。"""
+    iters = list(_PUNC_PATTERN.finditer(s))
+    if iters:
+        parts = [s[i.span()[0]: i.span()[1]] for i in iters]
+        remainder = s[iters[-1].span()[1]:]
+        if remainder:
+            parts.append(remainder)
+        return parts
+    return [s]
+
+
 def truncate_title_for_path_length(
     base_folder: Path,
     folder_template: str,
@@ -65,7 +84,7 @@ def truncate_title_for_path_length(
     title_break: list[str] | None = None,
 ) -> str:
     """若完整路径超过最大限制，智能截短标题字符串。"""
-    title = info_dict.get("title", "")
+    title = info_dict.get("title", "") or ""
     current_dict = dict(info_dict)
 
     def calc_len(t: str) -> int:
@@ -77,16 +96,27 @@ def truncate_title_for_path_length(
     if calc_len(title) <= max_len:
         return title
 
-    # 若有断句信息，尝试按句子边界从后向前截断
-    if title_break and len(title_break) > 1:
-        for end in range(len(title_break) - 1, 0, -1):
-            candidate = "".join(title_break[:end]).strip()
+    # 若未提供断句信息或仅有1项，尝试利用全半角标点符号进行断句分割
+    breaks = title_break if (title_break and len(title_break) > 1) else split_by_punc(title)
+    if breaks and len(breaks) > 1:
+        for end in range(len(breaks) - 1, 0, -1):
+            candidate = "".join(breaks[:end]).strip()
             if candidate and calc_len(candidate) <= max_len:
                 return candidate
 
-    # 循环截断直至满足要求
-    while len(title) > 5 and calc_len(title + "…") > max_len:
-        title = title[:-2]
+    # 循环截断直至满足要求（优先尝试保留省略号）
+    candidate_title = title
+    while len(candidate_title) > 1 and calc_len(candidate_title + "…") > max_len:
+        candidate_title = candidate_title[:-1]
+
+    if candidate_title and calc_len(candidate_title + "…") <= max_len:
+        return candidate_title + "…"
+
+    # 若加省略号仍超长（极端场景），尝试不带省略号截断
+    while len(candidate_title) > 1 and calc_len(candidate_title) > max_len:
+        candidate_title = candidate_title[:-1]
+
+    return candidate_title or title
 
 _SLICE_POSTFIX_RE = re.compile(
     r"[-_.\s]*(cd|disc|disk|part)?[-_.\s]*([a-z]|\d+)$", re.IGNORECASE
@@ -226,7 +256,7 @@ def organize_movie(
 
     # 路径清洗与超长截短
     cleaned_dict = {k: replace_illegal_chars(str(v)) for k, v in info_dict.items()}
-    cleaned_dict["title"] = truncate_title_for_path_length(
+    truncated_title = truncate_title_for_path_length(
         base_dir,
         config.summarizer.path.output_folder_pattern,
         cleaned_dict,
@@ -234,6 +264,7 @@ def organize_movie(
         by_byte=config.summarizer.path.length_by_byte,
         title_break=metadata.title_break,
     )
+    cleaned_dict["title"] = truncated_title if (truncated_title is not None) else (cleaned_dict.get("title") or "")
 
     # 构造目标子文件夹路径
     rel_folder = config.summarizer.path.output_folder_pattern.format_map(SafeDict(cleaned_dict))

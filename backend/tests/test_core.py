@@ -468,3 +468,91 @@ def test_save_actress_avatars_and_local_thumb(tmp_path: Path):
     # 彻底杜绝外网 URL
     assert "http://" not in xml_text and "https://" not in xml_text
 
+
+def test_split_by_punc():
+    """测试基于常见全半角标点符号的标题断句分割。"""
+    from app.core.organizer import split_by_punc
+
+    s1 = "标题的第一句 这应该是标题的第二句话，这应该是标题的第三句。"
+    parts1 = split_by_punc(s1)
+    assert len(parts1) == 3
+    assert parts1[0] == "标题的第一句 "
+    assert parts1[1] == "这应该是标题的第二句话，"
+    assert parts1[2] == "这应该是标题的第三句。"
+
+    s2 = "没有任何标点的单句标题"
+    parts2 = split_by_punc(s2)
+    assert parts2 == ["没有任何标点的单句标题"]
+
+
+def test_truncate_title_for_path_length(tmp_path):
+    """测试路径长度限制下的标题智能截短逻辑，绝不返回 None。"""
+    from app.core.organizer import truncate_title_for_path_length
+
+    base_folder = tmp_path / "very" / "long" / "nested" / "output" / "directory"
+    template = "[{num}] {title}"
+    info = {"num": "SNOS-074-C", "title": "短标题"}
+
+    # 1. 正常不超长情况
+    res = truncate_title_for_path_length(base_folder, template, info, max_len=500)
+    assert res == "短标题"
+
+    # 2. 超长标题，且有标点符号 (split_by_punc 生效)
+    long_title_punc = "标题的第一句！这应该是标题的第二句话，这应该是标题的第三句。"
+    info_punc = {"num": "SNOS-074-C", "title": long_title_punc}
+    # 设定较短 max_len，强制触发截断
+    res_punc = truncate_title_for_path_length(
+        base_folder, template, info_punc, max_len=len(str(base_folder).encode("utf-8")) + 35
+    )
+    assert res_punc is not None
+    assert "None" not in res_punc
+    assert "标题的第一句！" in res_punc
+
+    # 3. 超长标题，无标点符号，无 title_break，强制触发字符循环削减
+    long_title_no_punc = "这是一段完全没有任何标点符号的非常非常非常非常非常非常非常非常非常长的影片标题"
+    info_no_punc = {"num": "SNOS-074-C", "title": long_title_no_punc}
+    res_no_punc = truncate_title_for_path_length(
+        base_folder, template, info_no_punc, max_len=len(str(base_folder).encode("utf-8")) + 30
+    )
+    # 必须成功截短且带省略号，绝不能返回 None
+    assert res_no_punc is not None
+    assert res_no_punc != "None"
+    assert res_no_punc.endswith("…")
+    assert len(res_no_punc) < len(long_title_no_punc)
+
+
+def test_organize_movie_with_ultra_long_title(tmp_path):
+    """测试当影片标题导致路径超出限制时，归档目录名不会变成 None，且 NFO 保留完整真实标题。"""
+    video_file = tmp_path / "snos-074.mp4"
+    video_file.write_bytes(b"dummy video content")
+
+    ultra_long_title = "一二三四五六七八 一二三四五六七八九十一二三四五六七八九十一二三四" * 5
+    info = MovieInfo(
+        dvdid="SNOS-074",
+        title=ultra_long_title,
+        actress=["相沢みなみ"],
+        cover="http://example.com/cover.jpg",
+    )
+
+    out_base = tmp_path / "organized_root"
+    out_dir = organize_movie(
+        files=[str(video_file)],
+        metadata=info,
+        base_output_dir=out_base,
+        hard_sub=True,  # 会追加 -C 后缀变为 SNOS-074-C
+    )
+
+    out_path = Path(out_dir)
+    dir_name = out_path.name
+    # 验证目录名包含番号 SNOS-074-C 且绝对不包含 "None"
+    assert "SNOS-074-C" in dir_name
+    assert "None" not in dir_name
+    assert dir_name.startswith("[SNOS-074-C]")
+
+    # 验证 NFO 中的 <title> 依然完整保留了原始标题，未被截断或损坏
+    nfo_file = out_path / "movie.nfo"
+    assert nfo_file.is_file()
+    nfo_content = nfo_file.read_text(encoding="utf-8")
+    assert f"<title>SNOS-074-C {ultra_long_title}</title>" in nfo_content or ultra_long_title in nfo_content
+
+
