@@ -206,3 +206,34 @@ describe("BaseCrawler.fetchImageAsBase64", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("爬虫自定义 Base URL (反向代理/免代理镜像) 测试", () => {
+  it("JavBusCrawler 应正确采用自定义 baseUrl 并拼接目标 URL", async () => {
+    const crawler = new JavBusCrawler("seedmm.help");
+    expect(crawler.baseUrl).toBe("https://seedmm.help");
+
+    let requestedUrl = "";
+    vi.spyOn(crawler, "fetchDocument").mockImplementation(async (url: string) => {
+      requestedUrl = url;
+      return new DOMParser().parseFromString("<html><head><title>404 Page Not Found!</title></head></html>", "text/html");
+    });
+
+    await expect(crawler.scrape("IPX-177")).rejects.toThrow();
+    expect(requestedUrl).toBe("https://seedmm.help/IPX-177");
+  });
+
+  it("JavDBCrawler 应正确采用自定义 baseUrl 并发起搜索与详情请求", async () => {
+    const crawler = new JavDBCrawler("javdb580.com/");
+    expect(crawler.baseUrl).toBe("https://javdb580.com");
+
+    let requestedUrl = "";
+    vi.spyOn(crawler, "fetchDocument").mockImplementation(async (url: string) => {
+      requestedUrl = url;
+      return new DOMParser().parseFromString("<html><body></body></html>", "text/html");
+    });
+
+    await expect(crawler.scrape("IPX-177")).rejects.toThrow();
+    expect(requestedUrl).toBe("https://javdb580.com/search?q=IPX-177&f=all");
+  });
+});
+

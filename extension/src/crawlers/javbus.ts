@@ -2,12 +2,17 @@
  * JavBus 爬虫实现
  */
 
-import { BaseCrawler, MovieNotFoundError } from "./base";
+import { BaseCrawler, MovieNotFoundError, normalizeSiteUrl } from "./base";
 import { MovieInfo, RequestRetryConfig } from "./types";
 
 export class JavBusCrawler extends BaseCrawler {
   name = "javbus";
-  baseUrl = "https://www.javbus.com";
+  baseUrl: string;
+
+  constructor(baseUrl?: string) {
+    super();
+    this.baseUrl = normalizeSiteUrl(baseUrl, "https://www.javbus.com");
+  }
 
   async scrape(dvdid: string, config?: RequestRetryConfig): Promise<Partial<MovieInfo>> {
     const url = `${this.baseUrl}/${encodeURIComponent(dvdid)}`;

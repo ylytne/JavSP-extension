@@ -21,6 +21,7 @@ export interface CrawlerRuntimeConfig {
   burstJitter: number;
   burstCooldown: number;
   burstCooldownJitter: number;
+  proxyFree: Record<string, string>;
 }
 
 export type StatusFilter = "all" | "pending" | "completed" | "error";
@@ -39,5 +40,24 @@ export interface DashboardProps {
 export const CRAWLER_SITE_INFO: Record<string, { name: string; url: string }> = {
   airav: { name: "AirAV", url: "https://airav.io" },
   javdb: { name: "JavDB", url: "https://javdb.com" },
-  javbus: { name: "JavBus", url: "https://javbus.com" },
+  javbus: { name: "JavBus", url: "https://www.javbus.com" },
 };
+
+export function getCrawlerSiteInfo(
+  siteId: string,
+  proxyFree?: Record<string, string>
+): { name: string; url: string } {
+  const def = CRAWLER_SITE_INFO[siteId] || { name: siteId, url: "" };
+  const custom = proxyFree?.[siteId];
+  if (!custom || !custom.trim()) {
+    return def;
+  }
+  let trimmed = custom.trim();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+  return {
+    name: def.name,
+    url: trimmed.replace(/\/+$/, ""),
+  };
+}

@@ -59,6 +59,7 @@ export interface RequestRetryConfig {
 
 export interface ICrawler {
   name: string;
+  baseUrl?: string;
   scrape(dvdid: string, config?: RequestRetryConfig): Promise<Partial<MovieInfo>>;
 }
 

@@ -159,9 +159,11 @@ export {
 };
 
 export * from "./dvdid";
+export * from "./proxyfree";
 
 export abstract class BaseCrawler implements ICrawler {
   abstract name: string;
+  abstract baseUrl: string;
   abstract scrape(dvdid: string, config?: RequestRetryConfig): Promise<Partial<MovieInfo>>;
 
   /**

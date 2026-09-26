@@ -166,6 +166,15 @@ export function useSettingsConfig(wsState: "disconnected" | "connecting" | "conn
       }
 
       setSuccessToast("配置已成功更新并热生效！");
+
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime
+          .sendMessage({
+            action: "UPDATE_NET_RULES",
+            proxy_free: resData.config?.network?.proxy_free || {},
+          })
+          .catch(() => {});
+      }
     } catch (err: any) {
       setErrorMessage(err.message || "保存配置出错");
     } finally {
@@ -197,6 +206,15 @@ export function useSettingsConfig(wsState: "disconnected" | "connecting" | "conn
         setFormConfig(JSON.parse(JSON.stringify(resData.config)));
       }
       setSuccessToast("YAML 源码验证通过并已持久化保存！");
+
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime
+          .sendMessage({
+            action: "UPDATE_NET_RULES",
+            proxy_free: resData.config?.network?.proxy_free || {},
+          })
+          .catch(() => {});
+      }
     } catch (err: any) {
       setErrorMessage(err.message || "保存 YAML 配置失败");
     } finally {
@@ -243,6 +261,15 @@ export function useSettingsConfig(wsState: "disconnected" | "connecting" | "conn
         setSavedRawYaml(rawData.yaml || "");
       }
       setSuccessToast("已成功重置为系统默认配置！");
+
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime
+          .sendMessage({
+            action: "UPDATE_NET_RULES",
+            proxy_free: resData.config?.network?.proxy_free || {},
+          })
+          .catch(() => {});
+      }
     } catch (err: any) {
       setErrorMessage(err.message || "恢复默认配置出错");
     } finally {

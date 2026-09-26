@@ -10,6 +10,7 @@ export interface ScannerConfig {
 export interface NetworkConfig {
   retry: number;
   timeout: number;
+  proxy_free?: Record<string, string>;
 }
 
 export interface CrawlerConfig {

@@ -27,6 +27,7 @@ const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
   burstJitter: 2,
   burstCooldown: 60.0,
   burstCooldownJitter: 10.0,
+  proxyFree: {},
 };
 
 export function useDashboardConfig(addLog: (level: LogEntry["level"], message: string) => void) {
@@ -61,6 +62,15 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
       initTabBridgeHosts(crw.tab_bridge_hosts);
     }
 
+    if (net.proxy_free && typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+      chrome.runtime
+        .sendMessage({
+          action: "UPDATE_NET_RULES",
+          proxy_free: net.proxy_free,
+        })
+        .catch(() => {});
+    }
+
     setCrawlerConfig((prev) => ({
       ...prev,
       retry: net.retry ?? prev.retry,
@@ -90,6 +100,7 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
         typeof crw.burst_cooldown_jitter === "number"
           ? crw.burst_cooldown_jitter
           : prev.burstCooldownJitter,
+      proxyFree: net.proxy_free ?? prev.proxyFree ?? {},
     }));
   }, []);
 

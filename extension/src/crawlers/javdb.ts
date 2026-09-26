@@ -2,12 +2,17 @@
  * JavDB 爬虫实现
  */
 
-import { BaseCrawler, MovieNotFoundError } from "./base";
+import { BaseCrawler, MovieNotFoundError, normalizeSiteUrl } from "./base";
 import { MovieInfo, RequestRetryConfig } from "./types";
 
 export class JavDBCrawler extends BaseCrawler {
   name = "javdb";
-  baseUrl = "https://javdb.com";
+  baseUrl: string;
+
+  constructor(baseUrl?: string) {
+    super();
+    this.baseUrl = normalizeSiteUrl(baseUrl, "https://javdb.com");
+  }
 
   async scrape(dvdid: string, config?: RequestRetryConfig): Promise<Partial<MovieInfo>> {
     const searchUrl = `${this.baseUrl}/search?q=${encodeURIComponent(dvdid)}&f=all`;

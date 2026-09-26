@@ -70,7 +70,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
           wsConnected={wsState === "connected"}
           scanProgress={scanProgress}
         />
-        <CrawlerStatusNotice crawlers={crawlerConfig.crawlers} />
+        <CrawlerStatusNotice
+          crawlers={crawlerConfig.crawlers}
+          proxyFree={crawlerConfig.proxyFree}
+        />
       </div>
 
       {/* 批次任务统计与批量操作工具栏 */}

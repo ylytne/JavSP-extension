@@ -10,11 +10,29 @@ function setupSidePanel() {
   }
 }
 
-// 动态网络请求规则配置：为图床自动注入合法的 Referer 头以突破防盗链
-async function setupNetRules() {
+// 动态网络请求规则配置：为官方图床及自定义镜像站自动注入合法的 Referer 头以突破防盗链
+async function setupNetRules(customProxies?: Record<string, string>) {
   if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateDynamicRules) {
     return;
   }
+
+  // 若未直接传入，优先尝试从 chrome.storage.local 读取持久化镜像配置
+  let proxies = customProxies;
+  if (!proxies && chrome.storage?.local) {
+    try {
+      const stored = await chrome.storage.local.get("proxy_free");
+      if (stored && stored.proxy_free) {
+        proxies = stored.proxy_free;
+      }
+    } catch {}
+  }
+
+  if (customProxies && chrome.storage?.local) {
+    try {
+      await chrome.storage.local.set({ proxy_free: customProxies });
+    } catch {}
+  }
+
   const rules: chrome.declarativeNetRequest.Rule[] = [
     {
       id: 1001,
@@ -128,6 +146,54 @@ async function setupNetRules() {
     },
   ];
 
+  // 为每个配置的自定义镜像站动态注册 Referer 头防盗链绕过规则
+  if (proxies) {
+    let customRuleId = 1010;
+    for (const [_site, rawUrl] of Object.entries(proxies)) {
+      if (!rawUrl || !rawUrl.trim()) continue;
+      try {
+        const fullUrl = /^https?:\/\//i.test(rawUrl.trim())
+          ? rawUrl.trim()
+          : `https://${rawUrl.trim()}`;
+        const u = new URL(fullUrl);
+        const host = u.hostname.toLowerCase();
+        if (
+          !host ||
+          host.includes("javbus.com") ||
+          host.includes("javdb.com") ||
+          host.includes("airav.io")
+        ) {
+          // 官方主站已涵盖在静态基础规则中
+          continue;
+        }
+
+        const escapedHost = host.replace(/\./g, "\\.");
+        rules.push({
+          id: customRuleId++,
+          priority: 2,
+          action: {
+            type: "modifyHeaders" as chrome.declarativeNetRequest.RuleActionType,
+            requestHeaders: [
+              {
+                header: "Referer",
+                operation: "set" as chrome.declarativeNetRequest.HeaderOperation,
+                value: `https://${host}/`,
+              },
+            ],
+          },
+          condition: {
+            regexFilter: `^https?://([^/]+\\.)?${escapedHost}/.*`,
+            resourceTypes: [
+              "xmlhttprequest" as chrome.declarativeNetRequest.ResourceType,
+              "image" as chrome.declarativeNetRequest.ResourceType,
+              "other" as chrome.declarativeNetRequest.ResourceType,
+            ],
+          },
+        });
+      } catch {}
+    }
+  }
+
   try {
     const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
     const existingRuleIds = existingRules.map((r) => r.id);
@@ -135,7 +201,9 @@ async function setupNetRules() {
       removeRuleIds: existingRuleIds,
       addRules: rules,
     });
-    console.log("[JavSP Background] DeclarativeNetRequest 防盗链请求头重写规则已注册生效");
+    console.log(
+      `[JavSP Background] DeclarativeNetRequest 防盗链请求头重写规则已注册生效 (共 ${rules.length} 条规则)`
+    );
   } catch (err) {
     console.error("[JavSP Background] 注册 DeclarativeNetRequest 规则失败:", err);
   }
@@ -185,14 +253,26 @@ chrome.runtime.onInstalled.addListener(() => {
   setupContextMenu();
 });
 
-// 监听前台（如侧边栏）发起的指令
+// 监听前台发起的指令
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message && message.action === "OPEN_WORKBENCH") {
-    openWorkbenchTab().then(() => sendResponse({ success: true })).catch((err) => {
-      console.error("[JavSP Background] 打开工作台失败:", err);
-      sendResponse({ success: false, error: String(err) });
-    });
+    openWorkbenchTab()
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => {
+        console.error("[JavSP Background] 打开工作台失败:", err);
+        sendResponse({ success: false, error: String(err) });
+      });
     return true; // 保持异步通道
+  }
+
+  if (message && message.action === "UPDATE_NET_RULES") {
+    setupNetRules(message.proxy_free)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => {
+        console.error("[JavSP Background] 更新动态网络规则失败:", err);
+        sendResponse({ success: false, error: String(err) });
+      });
+    return true;
   }
 });
 
@@ -213,4 +293,3 @@ if (chrome.action && chrome.action.onClicked) {
     }
   });
 }
-

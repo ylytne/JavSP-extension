@@ -201,6 +201,7 @@ class NetworkConfig(BaseModel):
     """网络请求与超时重试配置。"""
     retry: int = 3
     timeout: float = 10.0
+    proxy_free: dict[str, str] = Field(default_factory=dict)
 
 
 class CrawlerConfig(BaseModel):

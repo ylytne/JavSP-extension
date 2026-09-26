@@ -13,6 +13,7 @@ import * as tabBridgeModule from "../tabBridge";
 // 构造一个简单的测试用 Crawler
 class TestCrawler extends BaseCrawler {
   name = "TestCrawler";
+  baseUrl = "https://example.com";
   async scrape() {
     return {};
   }

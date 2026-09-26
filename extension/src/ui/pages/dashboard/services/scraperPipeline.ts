@@ -22,14 +22,31 @@ export interface ScrapePipelineContext {
 /**
  * 根据图片 URL 识别来源站点
  */
-export function getSourceLabel(url: string): string {
+export function getSourceLabel(url: string, proxyFree?: Record<string, string>): string {
   try {
     const u = new URL(url);
-    if (u.hostname.includes("javbus")) return "JavBus";
-    if (u.hostname.includes("javdb") || u.hostname.includes("jdbstatic")) return "JavDB";
-    if (u.hostname.includes("dmm.co.jp")) return "DMM";
-    if (u.hostname.includes("arzon")) return "Arzon";
-    if (u.hostname.includes("airav")) return "AirAV";
+    const h = u.hostname.toLowerCase();
+    if (proxyFree) {
+      for (const [site, siteUrl] of Object.entries(proxyFree)) {
+        if (siteUrl && siteUrl.trim()) {
+          try {
+            const rawUrl = /^https?:\/\//i.test(siteUrl.trim()) ? siteUrl.trim() : `https://${siteUrl.trim()}`;
+            const pHost = new URL(rawUrl).hostname.toLowerCase();
+            if (pHost && (h === pHost || h.endsWith(`.${pHost}`))) {
+              if (site === "javbus") return "JavBus";
+              if (site === "javdb") return "JavDB";
+              if (site === "airav") return "AirAV";
+              return site;
+            }
+          } catch {}
+        }
+      }
+    }
+    if (h.includes("javbus")) return "JavBus";
+    if (h.includes("javdb") || h.includes("jdbstatic")) return "JavDB";
+    if (h.includes("dmm.co.jp")) return "DMM";
+    if (h.includes("arzon")) return "Arzon";
+    if (h.includes("airav")) return "AirAV";
     return u.hostname;
   } catch {
     return "外部源";
@@ -43,7 +60,8 @@ export async function downloadCoversWithFallback(
   candidateUrls: string[],
   dvdid: string,
   retryConfig: RequestRetryConfig,
-  addLog: (level: LogEntry["level"], message: string) => void
+  addLog: (level: LogEntry["level"], message: string) => void,
+  proxyFree?: Record<string, string>
 ): Promise<{ coverBase64: string; matchedCoverUrl?: string }> {
   let coverBase64 = "";
   let matchedCoverUrl: string | undefined;
@@ -59,7 +77,7 @@ export async function downloadCoversWithFallback(
 
   for (let i = 0; i < candidateUrls.length; i++) {
     const targetUrl = candidateUrls[i];
-    const sourceName = getSourceLabel(targetUrl);
+    const sourceName = getSourceLabel(targetUrl, proxyFree);
     const progressLabel = `(${i + 1}/${candidateUrls.length})`;
 
     addLog("step", `[${dvdid}] 正在下载封面 ${progressLabel} [${sourceName}]...`);
@@ -252,9 +270,9 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
     .join(" + ");
   addLog("info", `[${item.dvdid}] 启动目标驱动流水线抓取 (${enabledLabels})...`);
 
-  const javbus = new JavBusCrawler();
-  const javdb = new JavDBCrawler();
-  const airav = new AirAVCrawler();
+  const javbus = new JavBusCrawler(crawlerConfig.proxyFree?.javbus);
+  const javdb = new JavDBCrawler(crawlerConfig.proxyFree?.javdb);
+  const airav = new AirAVCrawler(crawlerConfig.proxyFree?.airav);
   const siteResults: Record<string, Partial<MovieInfo>> = {};
 
   const retryConfig: RequestRetryConfig = {
@@ -285,7 +303,7 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
       if (err instanceof SiteBlockedError) {
         addLog(
           "error",
-          `[${item.dvdid}] JavBus 触发反爬阻断 (${err.message})！建议在浏览器新标签页访问 www.javbus.com 完成人机验证`
+          `[${item.dvdid}] JavBus 触发反爬阻断 (${err.message})！建议在浏览器新标签页访问 ${javbus.baseUrl} 完成人机验证`
         );
       } else {
         addLog("warn", `[${item.dvdid}] JavBus 抓取跳过: ${err.message}`);
@@ -313,7 +331,7 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
           if (err instanceof SiteBlockedError) {
             addLog(
               "error",
-              `[${item.dvdid}] JavDB 触发反爬阻断 (${err.message})！建议在浏览器新标签页访问 javdb.com 完成人机验证`
+              `[${item.dvdid}] JavDB 触发反爬阻断 (${err.message})！建议在浏览器新标签页访问 ${javdb.baseUrl} 完成人机验证`
             );
           } else {
             addLog("warn", `[${item.dvdid}] JavDB 抓取跳过: ${err.message}`);
@@ -340,7 +358,7 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
           if (err instanceof SiteBlockedError) {
             addLog(
               "error",
-              `[${item.dvdid}] AirAV 触发反爬阻断 (${err.message})！建议在浏览器新标签页访问 airav.io 完成人机验证`
+              `[${item.dvdid}] AirAV 触发反爬阻断 (${err.message})！建议在浏览器新标签页访问 ${airav.baseUrl} 完成人机验证`
             );
           } else {
             addLog("warn", `[${item.dvdid}] AirAV 抓取跳过: ${err.message}`);
@@ -409,7 +427,8 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
     candidateUrls,
     item.dvdid,
     retryConfig,
-    addLog
+    addLog,
+    crawlerConfig.proxyFree
   );
 
   if (matchedCoverUrl) {

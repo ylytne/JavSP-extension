@@ -1,12 +1,16 @@
 import React from "react";
 import { Info, ExternalLink } from "lucide-react";
-import { CRAWLER_SITE_INFO } from "../types";
+import { getCrawlerSiteInfo } from "../types";
 
 export interface CrawlerStatusNoticeProps {
   crawlers: string[];
+  proxyFree?: Record<string, string>;
 }
 
-export const CrawlerStatusNotice: React.FC<CrawlerStatusNoticeProps> = ({ crawlers }) => {
+export const CrawlerStatusNotice: React.FC<CrawlerStatusNoticeProps> = ({
+  crawlers,
+  proxyFree,
+}) => {
   return (
     <div className="pt-2 border-t border-slate-100 space-y-2">
       <div className="flex items-center justify-between text-[11px] text-slate-500 flex-wrap gap-2">
@@ -14,7 +18,7 @@ export const CrawlerStatusNotice: React.FC<CrawlerStatusNoticeProps> = ({ crawle
           <span className="text-slate-400 font-medium">已启用爬虫站点:</span>
           {crawlers.length > 0 ? (
             crawlers.map((c) => {
-              const site = CRAWLER_SITE_INFO[c];
+              const site = getCrawlerSiteInfo(c, proxyFree);
               const name = site?.name || c;
               const url = site?.url;
 
@@ -53,7 +57,7 @@ export const CrawlerStatusNotice: React.FC<CrawlerStatusNoticeProps> = ({ crawle
           )}
         </div>
         <span className="text-[10px] text-slate-400">
-          可在「设置 &gt; 抓取与网络」管理启用的爬虫站点
+          可在「设置 &gt; 抓取与网络」管理启用的爬虫站点及镜像地址
         </span>
       </div>
 

@@ -147,6 +147,7 @@ describe("Dashboard 模块化重构后的组件与服务测试", () => {
       burstJitter: 0,
       burstCooldown: 0.02,
       burstCooldownJitter: 0,
+      proxyFree: {},
     };
 
     let hookResult: any;

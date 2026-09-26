@@ -1,7 +1,25 @@
 import React, { useState } from "react";
-import { X, Plus, AlertCircle, Info, Check, Coffee } from "lucide-react";
+import {
+  X,
+  Plus,
+  AlertCircle,
+  Info,
+  Check,
+  Coffee,
+  Globe,
+  RotateCcw,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  ExternalLink,
+} from "lucide-react";
 import { FullAppConfig } from "../types";
 import { extractHostname } from "../../../../crawlers/tabBridge";
+import {
+  normalizeSiteUrl,
+  testSiteConnectivity,
+  ConnectivityTestResult,
+} from "../../../../crawlers/base";
 
 interface NetworkTabProps {
   formConfig: FullAppConfig;
@@ -44,8 +62,74 @@ const KNOWN_CRAWLERS: CrawlerMeta[] = [
   },
 ];
 
+interface ProxyFreeSiteMeta {
+  id: string;
+  name: string;
+  defaultUrl: string;
+  placeholder: string;
+  badgeClass: string;
+}
+
+const PROXY_FREE_SITES: ProxyFreeSiteMeta[] = [
+  {
+    id: "javbus",
+    name: "JavBus",
+    defaultUrl: "https://www.javbus.com",
+    placeholder: "例如 seedmm.help 或 https://... (留空使用官方默认)",
+    badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  {
+    id: "javdb",
+    name: "JavDB",
+    defaultUrl: "https://javdb.com",
+    placeholder: "例如 javdb580.com 或 https://... (留空使用官方默认)",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  {
+    id: "airav",
+    name: "AirAV",
+    defaultUrl: "https://airav.io",
+    placeholder: "例如 airavplus2.cc 或 https://... (留空使用官方默认)",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+  },
+];
+
 export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }) => {
   const [newHostInput, setNewHostInput] = useState("");
+  const [testingSites, setTestingSites] = useState<Record<string, boolean>>({});
+  const [testResults, setTestResults] = useState<Record<string, ConnectivityTestResult | null>>({});
+
+  const handleTestSite = async (siteId: string, defaultUrl: string) => {
+    const currentVal = formConfig.network.proxy_free?.[siteId];
+    const targetUrl = normalizeSiteUrl(currentVal, defaultUrl);
+    setTestingSites((prev) => ({ ...prev, [siteId]: true }));
+    setTestResults((prev) => ({ ...prev, [siteId]: null }));
+    try {
+      const res = await testSiteConnectivity(targetUrl);
+      setTestResults((prev) => ({ ...prev, [siteId]: res }));
+    } catch (err: any) {
+      setTestResults((prev) => ({
+        ...prev,
+        [siteId]: { ok: false, latency: 0, error: err?.message || "测试失败" },
+      }));
+    } finally {
+      setTestingSites((prev) => ({ ...prev, [siteId]: false }));
+    }
+  };
+
+  const handleUpdateProxy = (siteId: string, value: string) => {
+    updateForm((cfg) => {
+      const currentProxy = { ...(cfg.network.proxy_free || {}) };
+      currentProxy[siteId] = value;
+      cfg.network.proxy_free = currentProxy;
+      return cfg;
+    });
+    setTestResults((prev) => ({ ...prev, [siteId]: null }));
+  };
+
+  const handleResetProxy = (siteId: string) => {
+    handleUpdateProxy(siteId, "");
+  };
 
   const handleAddHost = () => {
     const raw = newHostInput.trim();
@@ -186,6 +270,159 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
             <li><strong>分阶段并发加速</strong>：JavBus 优先锁定基石物料后，JavDB 与 AirAV 自动通过并发调度异步请求，大幅缩短单部影片的抓取等待耗时。</li>
             <li><strong>灵活按需启闭</strong>：如担心特定站点风控严苛，可在此随时一键关闭该站点；关闭后系统会自动由其余可用数据源智能兜底补全。</li>
           </ul>
+        </div>
+      </div>
+
+      {/* 站点反向代理与免代理镜像 (Proxy-Free Mirrors) */}
+      <div className="pt-2 border-t border-slate-100 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Globe size={15} className="text-indigo-600 shrink-0" />
+            <label className="block text-xs font-bold text-slate-700">
+              站点反向代理与免代理镜像 (Proxy-Free Mirrors)
+            </label>
+          </div>
+          <span className="text-[11px] text-slate-400">
+            自定义各站点的访问入口与反向代理域名
+          </span>
+        </div>
+
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          当官方主站受阻、不可访问或被墙时，可在此为各站点指定反向代理或免代理镜像站地址（例如{" "}
+          <code className="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded font-mono text-[10px]">
+            javdb580.com
+          </code>
+          、
+          <code className="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded font-mono text-[10px]">
+            airavplus2.cc
+          </code>
+          ）。爬虫刮削、剧照与封面下载将自动以指定的镜像地址发起请求，并自动继承 Referer 防盗链重写。留空则表示直接使用官方主站。
+        </p>
+
+        <div className="space-y-3">
+          {PROXY_FREE_SITES.map((site) => {
+            const rawVal = formConfig.network.proxy_free?.[site.id] || "";
+            const isCustom = Boolean(rawVal.trim());
+            const effectiveUrl = normalizeSiteUrl(rawVal, site.defaultUrl);
+            const isTesting = Boolean(testingSites[site.id]);
+            const testResult = testResults[site.id];
+
+            return (
+              <div
+                key={site.id}
+                className="p-3 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs hover:border-slate-300 transition"
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-slate-800">
+                      {site.name}
+                    </span>
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${site.badgeClass}`}
+                    >
+                      官方默认: {site.defaultUrl}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isCustom ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono font-medium px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full">
+                        <Check size={10} className="stroke-[2.5]" />
+                        镜像生效: {effectiveUrl}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        使用官方默认
+                      </span>
+                    )}
+
+                    {isCustom && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetProxy(site.id)}
+                        className="text-[11px] text-slate-400 hover:text-slate-600 flex items-center gap-1 transition cursor-pointer"
+                        title="清空并恢复为官方主站"
+                      >
+                        <RotateCcw size={11} />
+                        恢复默认
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder={site.placeholder}
+                      value={rawVal}
+                      onChange={(e) => handleUpdateProxy(site.id, e.target.value)}
+                      className="w-full text-xs font-mono px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTestSite(site.id, site.defaultUrl)}
+                    disabled={isTesting}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isTesting ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin text-indigo-600" />
+                        <span>测试中...</span>
+                      </>
+                    ) : (
+                      <span>测试连通</span>
+                    )}
+                  </button>
+
+                  <a
+                    href={effectiveUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      if (typeof chrome !== "undefined" && chrome?.tabs?.create) {
+                        e.preventDefault();
+                        chrome.tabs.create({ url: effectiveUrl });
+                      }
+                    }}
+                    title={`在浏览器新标签页打开 ${effectiveUrl}`}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition shrink-0"
+                  >
+                    <ExternalLink size={14} />
+                  </a>
+                </div>
+
+                {/* 连通性测试结果提示 */}
+                {testResult && (
+                  <div
+                    className={`p-2 rounded-lg text-[11px] flex items-center justify-between gap-2 animate-in fade-in duration-150 ${
+                      testResult.ok
+                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                        : "bg-rose-50 text-rose-800 border border-rose-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {testResult.ok ? (
+                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                      ) : (
+                        <XCircle size={13} className="text-rose-600 shrink-0" />
+                      )}
+                      <span>
+                        {testResult.ok
+                          ? `连通正常！响应延迟 ${testResult.latency}ms (HTTP ${testResult.status || 200})`
+                          : `连通异常: ${testResult.error || "无法访问"} (${testResult.latency}ms)`}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[10px] text-slate-400 truncate max-w-[200px]">
+                      {effectiveUrl}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

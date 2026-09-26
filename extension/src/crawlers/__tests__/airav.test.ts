@@ -345,4 +345,43 @@ describe("AirAVCrawler (DOM SSR)", () => {
     // 验证仅发起了 2 次请求（搜索页 + 优选页面 A），绝不多次发起请求去抓取页面 B
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
+
+  it("should support custom mirror baseUrl (e.g. airavplus2.cc) and strip mirror suffix from title", async () => {
+    const crawler = new AirAVCrawler("airavplus2.cc");
+    expect(crawler.baseUrl).toBe("https://airavplus2.cc");
+
+    const searchHtml = `
+      <div class="col oneVideo">
+        <div class="card">
+          <a href="/video?hid=test-mirror"></a>
+          <h5>IPX-177 相思相愛 溫泉旅行</h5>
+        </div>
+      </div>
+    `;
+    const detailHtml = `
+      <html>
+        <head><title>IPX-177 相思相愛 溫泉旅行 - airavplus2.cc</title></head>
+        <body>
+          <div class="video-title">
+            <h1>IPX-177 相思相愛 溫泉旅行 - airavplus2.cc</h1>
+          </div>
+          <div class="video-info">
+            <p>測試鏡像站簡介內容</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    vi.spyOn(crawler, "fetchDocument").mockImplementation(async (url: string) => {
+      if (url.includes("search_result")) {
+        return new DOMParser().parseFromString(searchHtml, "text/html");
+      }
+      return new DOMParser().parseFromString(detailHtml, "text/html");
+    });
+
+    const result = await crawler.scrape("IPX-177");
+    expect(result.url).toBe("https://airavplus2.cc/video?hid=test-mirror");
+    expect(result.title).toBe("相思相愛 溫泉旅行");
+  });
 });
+

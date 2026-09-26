@@ -15,6 +15,7 @@ import {
   isChineseText,
   cleanDvdidPrefix,
   isValidTitle,
+  normalizeSiteUrl,
 } from "./base";
 import { MovieInfo, RequestRetryConfig } from "./types";
 
@@ -33,9 +34,9 @@ export class AirAVCrawler extends BaseCrawler {
   name = "airav";
   baseUrl: string;
 
-  constructor(baseUrl = "https://airav.io") {
+  constructor(baseUrl?: string) {
     super();
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.baseUrl = normalizeSiteUrl(baseUrl, "https://airav.io");
   }
 
   /**
@@ -182,8 +183,15 @@ export class AirAVCrawler extends BaseCrawler {
       const ogTitle = doc.querySelector("meta[property='og:title']");
       rawTitle = ogTitle?.getAttribute("content")?.trim() || "";
     }
-    // 剥离标题尾部的 " - airav.io" 站点标示
-    rawTitle = rawTitle.replace(/\s*-\s*airav\.io\s*$/i, "").trim();
+    // 剥离标题尾部的站点标示（如 " - airav.io" 或自定义镜像域名 " - airavplus2.cc"）
+    let hostSuffix = "airav\\.(io|wiki|cc)";
+    try {
+      const u = new URL(this.baseUrl);
+      if (u.hostname) {
+        hostSuffix = `${hostSuffix}|${u.hostname.replace(/\./g, "\\.")}`;
+      }
+    } catch {}
+    rawTitle = rawTitle.replace(new RegExp(`\\s*-\\s*(${hostSuffix})\\s*$`, "i"), "").trim();
     // 剔除标题前面的番号
     let title = cleanDvdidPrefix(rawTitle, exactDvdid);
     title = unescapeHtml(title || rawTitle);

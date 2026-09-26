@@ -36,6 +36,12 @@ scanner:
 network:
   retry: 3
   timeout: 10.0
+  # 各站点的反向代理 / 免代理镜像地址（留空表示使用官方默认主站地址）
+  # 例如 javdb: 'https://javdb580.com', airav: 'https://airavplus2.cc'
+  proxy_free:
+    javbus: ''
+    javdb: ''
+    airav: ''
 crawler:
   sleep_after_scraping: 2.0
   sleep_jitter: 2.0
@@ -128,7 +134,7 @@ translator:
     name: openai
     url: https://api.groq.com/openai/v1/chat/completions
     api_key: ''
-    model: llama-3.1-70b-versatile
+    model: qwen/qwen3.8-27b
   fields:
     title: true
     plot: true

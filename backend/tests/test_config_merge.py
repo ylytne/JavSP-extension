@@ -214,3 +214,33 @@ def test_crawler_burst_protection_config_defaults_and_override(tmp_path: Path):
     assert loaded.crawler.sleep_after_scraping == 2.0
     assert loaded.crawler.sleep_jitter == 2.0
 
+
+def test_network_proxy_free_defaults_and_override(tmp_path: Path):
+    """测试网络免代理/反向代理 (proxy_free) 镜像站点配置的默认加载与自定义覆盖。"""
+    # 1. 默认配置加载校验
+    default_cfg = get_default_config()
+    assert isinstance(default_cfg.network.proxy_free, dict)
+
+    # 2. 自定义覆盖校验
+    custom_yaml = tmp_path / "config.yml"
+    custom_yaml.write_text(
+        yaml.dump({
+            "network": {
+                "retry": 4,
+                "proxy_free": {
+                    "javdb": "https://javdb580.com",
+                    "airav": "https://airavplus2.cc",
+                    "javbus": "https://seedmm.help",
+                },
+            }
+        }),
+        encoding="utf-8",
+    )
+    loaded = load_config(config_path=custom_yaml)
+    assert loaded.network.retry == 4
+    assert loaded.network.timeout == 10.0  # 未显式覆盖，继承默认
+    assert loaded.network.proxy_free["javdb"] == "https://javdb580.com"
+    assert loaded.network.proxy_free["airav"] == "https://airavplus2.cc"
+    assert loaded.network.proxy_free["javbus"] == "https://seedmm.help"
+
+
