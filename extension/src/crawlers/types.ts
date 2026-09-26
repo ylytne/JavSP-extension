@@ -27,6 +27,7 @@ export interface MovieInfo {
   serial?: string;             // 系列名
   genre: string[];             // 分类标签列表
   genre_id?: string[];         // 站点原始分类 ID
+  genre_norm?: string[];       // 规范化后的分类标签列表
   actress: string[];           // 出演女优列表
   actress_pics?: Record<string, string>; // 女优头像映射表
   preview_pics: string[];      // 剧照预览图 URL 列表

@@ -159,3 +159,57 @@ def process_cover_image(
     poster_img.save(poster_path, format="JPEG", quality=95)
 
     return str(fanart_path), str(poster_path)
+
+
+def generate_cropped_poster_base64(
+    cover_base64: str,
+    hard_sub: bool = False,
+    uncensored: bool = False,
+    cropper_ratio: float = 1.5,
+    cropper_engine: str | None = None,
+    standard_fanza_crop: bool = True,
+    add_label: bool = True,
+) -> str:
+    """在纯内存中裁剪封面图片并合成角标水印，返回 Base64 Data URL。
+
+    Args:
+        cover_base64: Base64 编码的图片数据（可包含 'data:image/...;base64,' 前缀）。
+        hard_sub: 是否包含内嵌中文字幕 (-C)。
+        uncensored: 是否为无码流出/破解 (-U)。
+        cropper_ratio: 竖版海报高宽比，默认 1.5 (2:3)。
+        cropper_engine: 裁剪引擎 ('slimeface' 或 None)。
+        standard_fanza_crop: 是否针对 800x538 标准比例展开图启用两步优化裁剪。
+        add_label: 是否添加角标。
+
+    Returns:
+        Base64 Data URL 字符串 ('data:image/jpeg;base64,...')。
+    """
+    raw_b64 = cover_base64
+    if "," in raw_b64:
+        raw_b64 = raw_b64.split(",", 1)[1]
+
+    img_data = base64.b64decode(raw_b64)
+    original_img = Image.open(io.BytesIO(img_data))
+    original_img = ImageOps.exif_transpose(original_img).convert("RGB")
+
+    cropper = get_cropper(cropper_engine)
+    poster_img = cropper.crop(original_img, cropper_ratio, standard_fanza_crop=standard_fanza_crop)
+
+    if add_label:
+        if hard_sub:
+            sub_path = find_watermark_path("sub_mark.png")
+            if sub_path:
+                with Image.open(sub_path) as sub_img:
+                    poster_img = add_label_to_poster(poster_img, sub_img, LabelPosition.TOP_LEFT)
+
+        if uncensored:
+            unc_path = find_watermark_path("unc_mark.png")
+            if unc_path:
+                with Image.open(unc_path) as unc_img:
+                    pos = LabelPosition.TOP_RIGHT if hard_sub else LabelPosition.TOP_LEFT
+                    poster_img = add_label_to_poster(poster_img, unc_img, pos)
+
+    buf = io.BytesIO()
+    poster_img.save(buf, format="JPEG", quality=95)
+    b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/jpeg;base64,{b64_str}"

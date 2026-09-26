@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 from pathlib import Path
+import logging
 import platform
 import sys
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from urllib.parse import urlparse
 from app import __version__
 from app.api.auth import verify_api_token
@@ -23,8 +24,12 @@ from app.config import (
     is_running_in_docker,
 )
 from app.api.ws import manager
+from app.core.models import MovieInfo
 from app.core.nfo_cleaner import clean_nfo_directory, clean_nfo_content
+from app.core.organizer import simulate_movie_organization
 from app.core.poster_recropper import recrop_directory_posters
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", dependencies=[Depends(verify_api_token)])
 
@@ -435,6 +440,58 @@ async def recrop_posters_endpoint(req: RecropPostersRequest) -> dict[str, Any]:
             for r in summary.results
         ],
     }
+
+
+class PreviewOrganizeRequest(BaseModel):
+    """刮削测试模拟整理请求体。"""
+    metadata: MovieInfo
+    cover_base64: str | None = None
+    hard_sub: bool = False
+    uncensored: bool = False
+    base_output_dir: str | None = None
+    test_filename: str = "test.mp4"
+    has_sample_fanart: bool = False
+
+
+class PreviewOrganizeResponse(BaseModel):
+    """刮削测试模拟整理响应体。"""
+    status: str = "ok"
+    target_dir: str
+    rel_folder: str
+    base_name: str
+    video_filename: str
+    nfo_filename: str
+    nfo_content: str
+    poster_filename: str
+    fanart_filename: str
+    extrafanarts_files: list[str]
+    actor_avatar_files: list[str]
+    cleaned_dict: dict[str, Any]
+    cropped_poster_base64: str | None = None
+    genre_norm: list[str] = Field(default_factory=list)
+    normalized_actresses: list[str] = Field(default_factory=list)
+
+
+@router.post("/organize/preview", response_model=PreviewOrganizeResponse)
+async def preview_organize_endpoint(req: PreviewOrganizeRequest) -> dict[str, Any]:
+    """根据 MovieInfo 元数据在纯内存中模拟整理产物（目录路径、NFO 与角标海报预览），不产生任何文件系统变动。"""
+    try:
+        cfg = get_config()
+        result = await anyio.to_thread.run_sync(
+            simulate_movie_organization,
+            req.metadata,
+            req.cover_base64,
+            req.hard_sub,
+            req.uncensored,
+            req.base_output_dir,
+            req.test_filename,
+            req.has_sample_fanart,
+            cfg,
+        )
+        return result
+    except Exception as exc:
+        logger.exception("模拟整理产物异常: %s", exc)
+        raise HTTPException(status_code=400, detail=f"模拟整理失败: {exc}") from exc
 
 
 

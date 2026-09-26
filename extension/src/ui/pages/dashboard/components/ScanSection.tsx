@@ -1,5 +1,5 @@
 import React from "react";
-import { FolderOpen, Search } from "lucide-react";
+import { FolderOpen, Search, FlaskConical } from "lucide-react";
 import { ProgressBar } from "../../../components/ProgressBar";
 import { ScanProgress } from "../types";
 
@@ -10,6 +10,7 @@ export interface ScanSectionProps {
   isScanning: boolean;
   wsConnected: boolean;
   scanProgress: ScanProgress | null;
+  onNavigatePreview?: () => void;
 }
 
 export const ScanSection: React.FC<ScanSectionProps> = ({
@@ -19,6 +20,7 @@ export const ScanSection: React.FC<ScanSectionProps> = ({
   isScanning,
   wsConnected,
   scanProgress,
+  onNavigatePreview,
 }) => {
   return (
     <>
@@ -53,6 +55,17 @@ export const ScanSection: React.FC<ScanSectionProps> = ({
           <Search size={14} />
           {isScanning ? "正在遍历磁盘..." : "扫描目录"}
         </button>
+        {onNavigatePreview && (
+          <button
+            type="button"
+            onClick={onNavigatePreview}
+            className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs shrink-0 cursor-pointer"
+            title="输入测试番号快速验证完整抓取与模拟落盘产物"
+          >
+            <FlaskConical size={14} />
+            <span>刮削测试与预览</span>
+          </button>
+        )}
       </div>
 
       {/* 扫描进度 */}

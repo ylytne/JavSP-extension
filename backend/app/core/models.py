@@ -17,7 +17,7 @@ class MovieInfo(BaseModel):
     ori_title_break: list[str] = Field(default_factory=list)
     plot: str | None = None
     ori_plot: str | None = None
-    cover: str
+    cover: str = ""
     big_cover: str | None = None
     covers: list[str] = Field(default_factory=list)
     big_covers: list[str] = Field(default_factory=list)

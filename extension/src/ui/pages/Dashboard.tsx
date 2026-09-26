@@ -16,6 +16,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   wsState,
   addLog,
   onProcessingChange,
+  onNavigateTab,
 }) => {
   const {
     serverAddress,
@@ -69,6 +70,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           isScanning={isScanning}
           wsConnected={wsState === "connected"}
           scanProgress={scanProgress}
+          onNavigatePreview={onNavigateTab ? () => onNavigateTab("preview") : undefined}
         />
         <CrawlerStatusNotice
           crawlers={crawlerConfig.crawlers}

@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   Settings as SettingsIcon,
+  FlaskConical,
   Wifi,
   WifiOff,
   Sparkles,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { Dashboard } from "./pages/Dashboard";
 import { LocalManagement } from "./pages/local/LocalManagement";
+import { ScrapePreviewTab } from "./pages/preview/ScrapePreviewTab";
 import { Settings } from "./pages/Settings";
 import { LogDrawer, LogEntry } from "./components/LogDrawer";
 import { wsService } from "../services/backend-ws";
@@ -21,7 +23,7 @@ import { updateChecker } from "../services/updateChecker";
 import { UpdateCheckResult } from "./pages/settings/types";
 
 export const WorkbenchApp: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "local" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "local" | "preview" | "settings">("dashboard");
 
   const [wsState, setWsState] = useState<"disconnected" | "connecting" | "connected">("disconnected");
   const [serverAddress, setServerAddress] = useState<string>(serverConfig.getCurrentServerAddress());
@@ -181,6 +183,17 @@ export const WorkbenchApp: React.FC = () => {
               本地管理
             </button>
             <button
+              onClick={() => setActiveTab("preview")}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition font-medium cursor-pointer ${
+                activeTab === "preview"
+                  ? "bg-white text-indigo-700 shadow-xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <FlaskConical size={15} />
+              刮削测试
+            </button>
+            <button
               onClick={() => setActiveTab("settings")}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition font-medium cursor-pointer ${
                 activeTab === "settings"
@@ -221,10 +234,17 @@ export const WorkbenchApp: React.FC = () => {
             wsState={wsState}
             addLog={addLog}
             onProcessingChange={setIsProcessing}
+            onNavigateTab={setActiveTab}
           />
         )}
         {activeTab === "local" && (
           <LocalManagement
+            wsState={wsState}
+            addLog={addLog}
+          />
+        )}
+        {activeTab === "preview" && (
+          <ScrapePreviewTab
             wsState={wsState}
             addLog={addLog}
           />

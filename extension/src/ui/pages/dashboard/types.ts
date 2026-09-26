@@ -35,6 +35,7 @@ export interface DashboardProps {
   wsState: "disconnected" | "connecting" | "connected";
   addLog: (level: LogEntry["level"], message: string) => void;
   onProcessingChange?: (processing: boolean) => void;
+  onNavigateTab?: (tab: "dashboard" | "local" | "settings" | "preview") => void;
 }
 
 export const CRAWLER_SITE_INFO: Record<string, { name: string; url: string }> = {

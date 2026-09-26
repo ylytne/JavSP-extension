@@ -18,9 +18,9 @@ from PIL import Image
 from app.config import get_config
 from app.core.actress import clean_movie_actresses, get_actress_alias_map, resolve_actress_alias
 from app.core.genre import clean_movie_genres
-from app.core.image import process_cover_image
+from app.core.image import process_cover_image, generate_cropped_poster_base64
 from app.core.models import MovieInfo, SafeDict
-from app.core.nfo import write_nfo
+from app.core.nfo import write_nfo, generate_nfo_content
 
 logger = logging.getLogger(__name__)
 
@@ -644,5 +644,168 @@ def save_actress_avatars(
         )
 
     return saved_actresses
+
+
+def simulate_movie_organization(
+    metadata: MovieInfo,
+    cover_base64: str | None = None,
+    hard_sub: bool = False,
+    uncensored: bool = False,
+    base_output_dir: str | Path | None = None,
+    test_filename: str = "test.mp4",
+    has_sample_fanart: bool = False,
+    config: AppConfig | None = None,
+) -> dict[str, Any]:
+    """纯内存模拟影片整理流程，计算目标目录、文件名、NFO 与角标海报，不触碰本地文件系统。
+
+    Args:
+        metadata: 刮削汇总后的 MovieInfo 结构。
+        cover_base64: 可选的 Base64 封面图。
+        hard_sub: 是否模拟包含内嵌字幕 (-C)。
+        uncensored: 是否模拟无码流出 (-U)。
+        base_output_dir: 基础输出目录，若未指定则默认为系统视频目录或相对路径。
+        test_filename: 模拟视频文件名（用于继承文件后缀，如 .mp4, .mkv）。
+        has_sample_fanart: 是否模拟抓取了 1 张剧照样本。
+        config: 可选的应用配置实例。
+
+    Returns:
+        包含模拟整理产物的字典（符合 PreviewOrganizeResponse 契约）。
+    """
+    cfg = config or get_config()
+
+    # 标签分类与演员别名规范化清洗
+    clean_movie_genres(metadata)
+    clean_movie_actresses(metadata)
+    info_dict = metadata.get_info_dict()
+
+    # 处理 -C / -U 额外属性后缀，防止重复追加
+    attr_suffix = ""
+    if hard_sub and uncensored:
+        attr_suffix = "-UC"
+    elif hard_sub:
+        attr_suffix = "-C"
+    elif uncensored:
+        attr_suffix = "-U"
+
+    base_num = info_dict["num"]
+    for sfx in ("-UC", "-CU", "-C", "-U"):
+        if base_num.upper().endswith(sfx):
+            base_num = base_num[: -len(sfx)]
+            break
+
+    if attr_suffix:
+        info_dict["num"] = base_num + attr_suffix
+    else:
+        info_dict["num"] = base_num
+
+    # 女优数量截断
+    max_actress = cfg.summarizer.path.max_actress_count
+    if metadata.actress:
+        info_dict["actress"] = ",".join(metadata.actress[:max_actress])
+    else:
+        info_dict["actress"] = cfg.summarizer.default.actress
+
+    if base_output_dir:
+        base_dir = Path(base_output_dir)
+    elif cfg.scanner.input_directory:
+        base_dir = Path(cfg.scanner.input_directory)
+    else:
+        base_dir = Path("/videos")
+
+    # 路径清洗与超长截短
+    cleaned_dict = {k: replace_illegal_chars(str(v)) for k, v in info_dict.items()}
+    truncated_title = truncate_title_for_path_length(
+        base_dir,
+        cfg.summarizer.path.output_folder_pattern,
+        cleaned_dict,
+        max_len=cfg.summarizer.path.length_maximum,
+        by_byte=cfg.summarizer.path.length_by_byte,
+        title_break=metadata.title_break,
+    )
+    cleaned_dict["title"] = truncated_title if (truncated_title is not None) else (cleaned_dict.get("title") or "")
+
+    # 相对输出文件夹与目标目录
+    rel_folder = cfg.summarizer.path.output_folder_pattern.format_map(SafeDict(cleaned_dict))
+    target_dir = str(base_dir / rel_folder.lstrip("/\\"))
+
+    # 基础文件名 (如 IPX-177 或 IPX-177-C)
+    base_name = cfg.summarizer.path.basename_pattern.format_map(SafeDict(cleaned_dict))
+    base_name = replace_illegal_chars(base_name)
+
+    # 视频文件名
+    ext = Path(test_filename).suffix or ".mp4"
+    video_filename = f"{base_name}{ext}"
+
+    # NFO 文件名与内容
+    nfo_basename = cfg.summarizer.nfo.basename_pattern
+    if "{" in nfo_basename and "}" in nfo_basename:
+        nfo_filename = f"{replace_illegal_chars(nfo_basename.format_map(SafeDict(cleaned_dict)))}.nfo"
+    else:
+        nfo_filename = f"{nfo_basename}.nfo"
+
+    local_actors = [act.strip() for act in metadata.actress if act.strip()] if cfg.summarizer.actress_avatar.enabled else None
+    nfo_content = generate_nfo_content(metadata, config=cfg, local_actors=local_actors)
+
+    # 横版背景图与竖版海报文件名
+    fanart_pat = cfg.summarizer.fanart.basename_pattern
+    poster_pat = cfg.summarizer.cover.basename_pattern
+    fanart_filename = (
+        f"{replace_illegal_chars(fanart_pat.format_map(SafeDict(cleaned_dict)))}.jpg"
+        if "{" in fanart_pat and "}" in fanart_pat
+        else f"{fanart_pat}.jpg"
+    )
+    poster_filename = (
+        f"{replace_illegal_chars(poster_pat.format_map(SafeDict(cleaned_dict)))}.jpg"
+        if "{" in poster_pat and "}" in poster_pat
+        else f"{poster_pat}.jpg"
+    )
+
+    # 规划剧照路径 (若抓取了剧照样本)
+    extrafanarts_files: list[str] = []
+    if cfg.summarizer.extra_fanarts.enabled and has_sample_fanart:
+        extrafanarts_files.append("extrafanart/0.jpg")
+
+    # 规划女优头像路径
+    actor_avatar_files: list[str] = []
+    if cfg.summarizer.actress_avatar.enabled and metadata.actress:
+        for act in metadata.actress:
+            act_clean = act.strip()
+            if act_clean:
+                actor_avatar_files.append(f".actors/{replace_illegal_chars(act_clean)}.jpg")
+
+    # 内存级海报裁剪与角标合成
+    cropped_poster_base64: str | None = None
+    if cover_base64:
+        try:
+            cropped_poster_base64 = generate_cropped_poster_base64(
+                cover_base64=cover_base64,
+                hard_sub=hard_sub,
+                uncensored=uncensored,
+                cropper_ratio=cfg.summarizer.cover.crop.ratio,
+                cropper_engine=cfg.summarizer.cover.crop.engine,
+                standard_fanza_crop=cfg.summarizer.cover.crop.standard_fanza_crop,
+                add_label=cfg.summarizer.cover.add_label,
+            )
+        except Exception as e:
+            logger.warning("模拟海报裁剪合成失败: %s", e)
+            cropped_poster_base64 = None
+
+    return {
+        "status": "ok",
+        "target_dir": target_dir,
+        "rel_folder": rel_folder,
+        "base_name": base_name,
+        "video_filename": video_filename,
+        "nfo_filename": nfo_filename,
+        "nfo_content": nfo_content,
+        "poster_filename": poster_filename,
+        "fanart_filename": fanart_filename,
+        "extrafanarts_files": extrafanarts_files,
+        "actor_avatar_files": actor_avatar_files,
+        "cleaned_dict": cleaned_dict,
+        "cropped_poster_base64": cropped_poster_base64,
+        "genre_norm": metadata.genre_norm or metadata.genre or [],
+        "normalized_actresses": metadata.actress or [],
+    }
 
 
