@@ -12,9 +12,12 @@ import {
   Sparkles,
   Server,
   AlertCircle,
+  ShieldAlert,
 } from "lucide-react";
 import { wsService } from "../services/backend-ws";
 import { serverConfig } from "../services/serverConfig";
+import { updateChecker } from "../services/updateChecker";
+import { UpdateCheckResult } from "./pages/settings/types";
 import { LogDrawer, LogEntry } from "./components/LogDrawer";
 import { ProgressBar } from "./components/ProgressBar";
 import { ServerConnectionModal } from "./components/ServerConnectionModal";
@@ -33,6 +36,7 @@ export const SidepanelApp: React.FC = () => {
   const [serverAddress, setServerAddress] = useState<string>(serverConfig.getCurrentServerAddress());
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
 
   // 监控状态
   const [currentScan, setCurrentScan] = useState<{ scanned: number; found: number } | null>(null);
@@ -157,6 +161,15 @@ export const SidepanelApp: React.FC = () => {
     };
   }, [addLog]);
 
+  // 静默检查更新 (12 小时本地缓存)
+  useEffect(() => {
+    updateChecker.checkUpdate({ force: false }).then((res) => {
+      if (res.success) {
+        setUpdateInfo(res);
+      }
+    });
+  }, []);
+
   const progressPercent =
     stats.total > 0
       ? Math.min(100, Math.round(((stats.completed + stats.failed) / stats.total) * 100))
@@ -177,35 +190,77 @@ export const SidepanelApp: React.FC = () => {
           </div>
         </div>
 
-        {/* 连接状态指示（可点击直接配置后端） */}
-        <button
-          type="button"
-          onClick={() => setIsServerModalOpen(true)}
-          className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium transition cursor-pointer hover:opacity-85 shadow-2xs ${
-            wsState === "connected"
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-              : wsState === "connecting"
-              ? "bg-amber-50 text-amber-700 border border-amber-200"
-              : "bg-rose-50 text-rose-700 border border-rose-200"
-          }`}
-          title="点击配置后端连接地址"
-        >
-          {wsState === "connected" ? (
-            <>
-              <Wifi size={11} className="text-emerald-600" />
-              <span>在线</span>
-            </>
-          ) : (
-            <>
-              <WifiOff size={11} className="text-rose-500" />
-              <span>{wsState === "connecting" ? "连接中" : "离线(点击配置)"}</span>
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {/* 更新 / 安全状态提示徽标 */}
+          {updateInfo?.backend?.isCritical ? (
+            <button
+              type="button"
+              onClick={handleOpenWorkbench}
+              className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-rose-50 text-rose-700 border border-rose-300 animate-pulse cursor-pointer hover:bg-rose-100"
+              title="检测到后端重要安全更新，点击打开工作台"
+            >
+              <ShieldAlert size={10} className="text-rose-600" />
+              <span>安全预警</span>
+            </button>
+          ) : (updateInfo?.extension.hasUpdate || updateInfo?.backend.hasUpdate) ? (
+            <button
+              type="button"
+              onClick={handleOpenWorkbench}
+              className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 cursor-pointer hover:bg-indigo-100"
+              title="发现新版本，点击打开工作台查看"
+            >
+              <Sparkles size={10} className="text-indigo-600" />
+              <span>新版</span>
+            </button>
+          ) : null}
+
+          {/* 连接状态指示（可点击直接配置后端） */}
+          <button
+            type="button"
+            onClick={() => setIsServerModalOpen(true)}
+            className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium transition cursor-pointer hover:opacity-85 shadow-2xs ${
+              wsState === "connected"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : wsState === "connecting"
+                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                : "bg-rose-50 text-rose-700 border border-rose-200"
+            }`}
+            title="点击配置后端连接地址"
+          >
+            {wsState === "connected" ? (
+              <>
+                <Wifi size={11} className="text-emerald-600" />
+                <span>在线</span>
+              </>
+            ) : (
+              <>
+                <WifiOff size={11} className="text-rose-500" />
+                <span>{wsState === "connecting" ? "连接中" : "离线(点击配置)"}</span>
+              </>
+            )}
+          </button>
+        </div>
       </header>
 
       {/* 主视图区域 */}
       <main className="flex-1 p-3 space-y-3 overflow-y-auto">
+        {/* 高危安全预警横幅 */}
+        {updateInfo?.backend?.isCritical && (
+          <div className="bg-rose-600 text-white rounded-xl p-2.5 text-xs flex items-center justify-between shadow-xs animate-in fade-in">
+            <div className="flex items-center gap-2 min-w-0 pr-1">
+              <ShieldAlert size={15} className="shrink-0 text-rose-200" />
+              <span className="font-bold text-[11px] leading-tight truncate">后端发现重要安全修复！</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenWorkbench}
+              className="text-[10px] bg-white text-rose-700 px-2 py-0.5 rounded font-bold hover:bg-rose-50 cursor-pointer shrink-0"
+            >
+              去升级
+            </button>
+          </div>
+        )}
+
         {/* 离线时醒目的快速配置引导条 */}
         {wsState !== "connected" && (
           <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 flex items-center justify-between shadow-xs animate-in fade-in">

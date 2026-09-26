@@ -8,6 +8,7 @@ import {
   Sparkles,
   Layers,
   HelpCircle,
+  ShieldAlert,
 } from "lucide-react";
 import { Dashboard } from "./pages/Dashboard";
 import { LocalManagement } from "./pages/local/LocalManagement";
@@ -16,6 +17,8 @@ import { LogDrawer, LogEntry } from "./components/LogDrawer";
 import { wsService } from "../services/backend-ws";
 import { serverConfig } from "../services/serverConfig";
 import { ServerConnectionModal } from "./components/ServerConnectionModal";
+import { updateChecker } from "../services/updateChecker";
+import { UpdateCheckResult } from "./pages/settings/types";
 
 export const WorkbenchApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"dashboard" | "local" | "settings">("dashboard");
@@ -25,6 +28,7 @@ export const WorkbenchApp: React.FC = () => {
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
 
   const addLog = useCallback((level: LogEntry["level"], message: string) => {
     const time = new Date().toLocaleTimeString();
@@ -71,6 +75,15 @@ export const WorkbenchApp: React.FC = () => {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isProcessing]);
 
+  // 静默检查 GitHub Release 更新 (利用 12 小时本地缓存)
+  useEffect(() => {
+    updateChecker.checkUpdate({ force: false }).then((res) => {
+      if (res.success) {
+        setUpdateInfo(res);
+      }
+    });
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900">
       {/* 顶部主导航栏（宽屏大工作台风格） */}
@@ -94,6 +107,29 @@ export const WorkbenchApp: React.FC = () => {
 
         {/* 状态与 Tab 切换 */}
         <div className="flex items-center gap-4">
+          {/* 更新 / 安全状态提示徽标 */}
+          {updateInfo?.backend?.isCritical ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-rose-50 text-rose-700 border border-rose-300 animate-pulse cursor-pointer hover:bg-rose-100 shadow-2xs"
+              title="检测到后端服务存在紧急安全修复，点击前往关于与更新"
+            >
+              <ShieldAlert size={13} className="text-rose-600" />
+              <span>安全预警</span>
+            </button>
+          ) : (updateInfo?.extension.hasUpdate || updateInfo?.backend.hasUpdate) ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 cursor-pointer hover:bg-indigo-100 shadow-2xs"
+              title="发现新版本，点击前往关于与更新"
+            >
+              <Sparkles size={13} className="text-indigo-600" />
+              <span>新版可用</span>
+            </button>
+          ) : null}
+
           {/* 连接状态指示 (可点击快速配置) */}
           <button
             type="button"
@@ -158,6 +194,25 @@ export const WorkbenchApp: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* 严重安全预警 Banner (高优先级) */}
+      {updateInfo?.backend?.isCritical && (
+        <div className="bg-rose-600 text-white px-6 py-2.5 text-xs flex items-center justify-between shadow-xs sticky top-[57px] z-20 animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <ShieldAlert size={16} className="shrink-0 text-rose-200" />
+            <span className="font-semibold">
+              【安全预警】后端服务发布了重要安全修复（{updateInfo.backend.securityWarning || "请尽快更新以防范风险"}）。
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab("settings")}
+            className="text-[11px] bg-white text-rose-700 px-3 py-1 rounded-md font-bold hover:bg-rose-50 transition cursor-pointer shrink-0 shadow-2xs"
+          >
+            查看跨端升级指引 →
+          </button>
+        </div>
+      )}
 
       {/* 主视图内容区域 */}
       <main className="flex-1 w-full max-w-[1920px] mx-auto px-4 md:px-6 py-5">

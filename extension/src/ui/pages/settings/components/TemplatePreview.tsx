@@ -53,7 +53,7 @@ export function parsePathSegments(rawPath: string, baseDirectory?: string | null
   const formatted = formatTemplate(rawPath).trim();
   const defaultLabel = baseDirectory?.trim()
     ? `[扫描目标目录: ${baseDirectory.trim()}]`
-    : `[扫描目标目录 (如 D:/download)]`;
+    : `[扫描目标目录 (假设为 D:/download)]`;
 
   if (!formatted) {
     return {

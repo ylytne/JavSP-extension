@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 from pathlib import Path
+import platform
+import sys
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -90,11 +92,19 @@ class PreviewNfoResponse(BaseModel):
 
 @router.get("/ping")
 async def ping() -> dict[str, Any]:
-    """健康探测端点，供前端初始化或断线重连时探测服务存活。"""
+    """健康探测端点，供前端初始化或断线重连时探测服务存活并报告宿主运行环境。"""
+    is_docker = is_running_in_docker()
+    is_binary = getattr(sys, "frozen", False)
+    run_mode = "docker" if is_docker else ("binary" if is_binary else "source")
+
     return {
         "status": "ok",
         "version": __version__,
-        "is_docker": is_running_in_docker(),
+        "is_docker": is_docker,
+        "run_mode": run_mode,
+        "platform": platform.system(),
+        "arch": platform.machine(),
+        "min_extension_version": "0.1.0",
     }
 
 

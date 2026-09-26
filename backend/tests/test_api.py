@@ -31,6 +31,10 @@ def test_rest_ping(client):
     assert data["version"] == "0.1.0"
     assert "is_docker" in data
     assert isinstance(data["is_docker"], bool)
+    assert data["run_mode"] in ("source", "binary", "docker")
+    assert isinstance(data["platform"], str) and len(data["platform"]) > 0
+    assert isinstance(data["arch"], str) and len(data["arch"]) > 0
+    assert data["min_extension_version"] == "0.1.0"
 
 
 def test_is_running_in_docker(monkeypatch):

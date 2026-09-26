@@ -2,6 +2,8 @@
  * 扩展端连接服务配置管理 (独立于后端 config.yml，保存在浏览器 chrome.storage.local)
  */
 
+import { BackendRunMode } from "../ui/pages/settings/types";
+
 const STORAGE_KEY_ADDR = "javsp_server_address";
 const STORAGE_KEY_TOKEN = "javsp_api_token";
 export const DEFAULT_SERVER_ADDRESS = "127.0.0.1:8765";
@@ -18,6 +20,14 @@ class ServerConfigService {
   private currentToken: string = "";
   private isInitialized = false;
   private listeners: Set<ServerConfigChangeListener> = new Set();
+  private lastBackendInfo: {
+    version?: string;
+    is_docker?: boolean;
+    run_mode?: BackendRunMode;
+    platform?: string;
+    arch?: string;
+    min_extension_version?: string;
+  } | null = null;
 
   constructor() {
     this.init();
@@ -241,6 +251,20 @@ class ServerConfigService {
   }
 
   /**
+   * 同步获取最近一次测试连接成功的后端环境元数据
+   */
+  public getLastBackendInfo(): {
+    version?: string;
+    is_docker?: boolean;
+    run_mode?: BackendRunMode;
+    platform?: string;
+    arch?: string;
+    min_extension_version?: string;
+  } | null {
+    return this.lastBackendInfo;
+  }
+
+  /**
    * 测试连接指定地址与 Token 的连通性与鉴权有效性
    */
   public async testConnection(
@@ -251,6 +275,10 @@ class ServerConfigService {
     latency: number;
     version?: string;
     is_docker?: boolean;
+    run_mode?: BackendRunMode;
+    platform?: string;
+    arch?: string;
+    min_extension_version?: string;
     error?: string;
   }> {
     const baseUrl = this.getHttpBaseUrl(address);
@@ -289,11 +317,19 @@ class ServerConfigService {
 
       const data = await resp.json();
       if (data.status === "ok") {
+        const info = {
+          version: data.version || "未知版本",
+          is_docker: Boolean(data.is_docker),
+          run_mode: (data.run_mode as BackendRunMode) || (data.is_docker ? "docker" : "source"),
+          platform: data.platform || "Unknown",
+          arch: data.arch || "",
+          min_extension_version: data.min_extension_version,
+        };
+        this.lastBackendInfo = info;
         return {
           success: true,
           latency,
-          version: data.version || "未知版本",
-          is_docker: Boolean(data.is_docker),
+          ...info,
         };
       } else {
         return {

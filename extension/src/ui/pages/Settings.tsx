@@ -9,6 +9,7 @@ import {
   Server,
   X,
   CheckCircle2,
+  Info,
 } from "lucide-react";
 
 import { FullAppConfig, SettingsProps, TabType } from "./settings/types";
@@ -23,6 +24,7 @@ import { SummarizerTab } from "./settings/tabs/SummarizerTab";
 import { MediaTab } from "./settings/tabs/MediaTab";
 import { TranslatorTab } from "./settings/tabs/TranslatorTab";
 import { ServerTab } from "./settings/tabs/ServerTab";
+import { AboutTab } from "./settings/tabs/AboutTab";
 
 export type { FullAppConfig, SettingsProps, TabType };
 
@@ -110,6 +112,7 @@ export const Settings: React.FC<SettingsProps> = ({ wsState }) => {
               { key: "media", label: "媒体与剧照", icon: ImageIcon },
               { key: "translator", label: "翻译引擎", icon: Languages },
               { key: "server", label: "服务网络", icon: Server },
+              { key: "about", label: "关于与更新", icon: Info },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
@@ -132,7 +135,7 @@ export const Settings: React.FC<SettingsProps> = ({ wsState }) => {
 
           {/* 表单主体内容区 */}
           <div className="p-5 space-y-5">
-            {!formConfig && activeTab !== "server" && (
+            {!formConfig && activeTab !== "server" && activeTab !== "about" && (
               <div className="py-12 px-4 text-center space-y-3">
                 <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
                   <AlertCircle size={24} />
@@ -191,6 +194,10 @@ export const Settings: React.FC<SettingsProps> = ({ wsState }) => {
                 onSaveClientAddress={handleSaveClientAddress}
               />
             )}
+
+            {activeTab === "about" && (
+              <AboutTab serverAddress={clientAddress} />
+            )}
           </div>
         </div>
       )}
@@ -209,7 +216,7 @@ export const Settings: React.FC<SettingsProps> = ({ wsState }) => {
       )}
 
       {/* 底部悬浮/操作栏 */}
-      {formConfig && (
+      {formConfig && activeTab !== "about" && (
         <SettingsActionBar
           saving={saving}
           isDirty={isDirty}

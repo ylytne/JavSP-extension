@@ -137,12 +137,58 @@ export interface SettingsProps {
   wsState: "disconnected" | "connecting" | "connected";
 }
 
-export type TabType = "scanner" | "network" | "summarizer" | "media" | "translator" | "server";
+export type TabType = "scanner" | "network" | "summarizer" | "media" | "translator" | "server" | "about";
+
+export type BackendRunMode = "source" | "binary" | "docker" | "unknown";
 
 export interface TestConnectionResult {
   success: boolean;
   latency: number;
   version?: string;
   is_docker?: boolean;
+  run_mode?: BackendRunMode;
+  platform?: string;
+  arch?: string;
+  min_extension_version?: string;
   error?: string;
 }
+
+export interface BackendUpgradeGuide {
+  type: "command" | "download" | "docker";
+  title: string;
+  description: string;
+  actionText?: string;
+  copyCommand?: string;
+  downloadUrl?: string;
+}
+
+export interface ComponentUpdateStatus {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  changelog?: string;
+  downloadUrl?: string;
+  isCritical?: boolean;
+  securityWarning?: string | null;
+}
+
+export interface UpdateCheckResult {
+  success: boolean;
+  checkedAt: number;
+  fromCache: boolean;
+  tag: string;
+  releaseUrl: string;
+  extension: ComponentUpdateStatus;
+  backend: ComponentUpdateStatus & {
+    runMode: BackendRunMode;
+    platform: string;
+    arch: string;
+    upgradeGuide: BackendUpgradeGuide;
+  };
+  compatibility: {
+    isCompatible: boolean;
+    warningMessage?: string;
+  };
+  error?: string;
+}
+
