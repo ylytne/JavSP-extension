@@ -152,11 +152,16 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
   const toggleCrawler = (id: string) => {
     updateForm((cfg) => {
       const current = cfg.crawlers || [];
-      if (current.includes(id)) {
-        cfg.crawlers = current.filter((c) => c !== id);
-      } else {
-        cfg.crawlers = [...current, id];
+      const nextSet = new Set(
+        current.includes(id) ? current.filter((c) => c !== id) : [...current, id]
+      );
+      // 保持与已知站点的标准定义顺序一致，彻底杜绝开关点击导致数组乱序污染
+      const standardOrder = KNOWN_CRAWLERS.map((c) => c.id);
+      const sorted = standardOrder.filter((c) => nextSet.has(c));
+      for (const item of nextSet) {
+        if (!sorted.includes(item)) sorted.push(item);
       }
+      cfg.crawlers = sorted;
       return cfg;
     });
   };

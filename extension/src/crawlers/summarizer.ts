@@ -239,9 +239,13 @@ export function summarizeMovieResults(
   }
 
   // -------------------------------------------------------------
-  // 6. 其他基础字段依次继承
+  // 6. 其他基础字段依次继承（官方基石物料优先：JavBus > 其他辅助数据源）
   // -------------------------------------------------------------
-  for (const site of priorityOrder) {
+  const baseMetaOrder = [
+    ...(siteData["javbus"] ? ["javbus"] : []),
+    ...priorityOrder.filter((s) => s !== "javbus"),
+  ];
+  for (const site of baseMetaOrder) {
     const data = siteData[site];
     if (!data) continue;
 
@@ -314,7 +318,7 @@ export function summarizeMovieResults(
   }
 
   // -------------------------------------------------------------
-  // 7. 封面图与大图梯队裁决 (JavBus > AirAV > 非JavDB > JavDB保底/禁用)
+  // 7. 封面图与大图梯队裁决 (JavBus基石 > AirAV增强 > 非JavDB > JavDB保底/禁用)
   // -------------------------------------------------------------
   const candidateCovers: string[] = [];
   const candidateBigCovers: string[] = [];
@@ -339,9 +343,13 @@ export function summarizeMovieResults(
     }
   };
 
-  // 非 JavDB 站点按优先顺序采集
-  const nonJavdbOrder = priorityOrder.filter((s) => s !== "javdb");
-  for (const site of nonJavdbOrder) {
+  // 严格执行目标驱动梯队：JavBus(官方高清展开图基石) > AirAV(无水印封面增强) > 其余非JavDB站点 > JavDB(水印图保底/禁用)
+  const coverSourceOrder = [
+    ...(siteData["javbus"] ? ["javbus"] : []),
+    ...(siteData["airav"] ? ["airav"] : []),
+    ...priorityOrder.filter((s) => s !== "javbus" && s !== "airav" && s !== "javdb"),
+  ];
+  for (const site of coverSourceOrder) {
     addCoversFromData(siteData[site]);
   }
 

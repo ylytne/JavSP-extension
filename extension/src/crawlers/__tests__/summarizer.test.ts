@@ -118,7 +118,7 @@ describe("summarizeMovieResults", () => {
     expect(summarized.uncensored).toBe(true);
   });
 
-  it("should prioritize airav when priorityOrder has airav first", () => {
+  it("should keep JavBus HD cover priority while extracting AirAV Chinese title and plot", () => {
     const mockAirav: Partial<MovieInfo> = {
       dvdid: "IPX-177",
       title: "相思相愛的溫泉旅行 (官方中文版)",
@@ -131,14 +131,39 @@ describe("summarizeMovieResults", () => {
       ["airav", "javbus"]
     );
 
+    // 中文本土化字段采纳 AirAV
     expect(summarized.title).toBe("相思相愛的溫泉旅行 (官方中文版)");
-    expect(summarized.cover).toBe("https://airav.io/airav_cover.jpg");
     expect(summarized.plot).toBe("AirAV 的中文劇情簡介");
-    // JavBus cover follows AirAV cover
+    // 高清基石封面物料依然优先采纳 JavBus 无水印展开图
+    expect(summarized.cover).toBe("https://javbus.com/big_cover.jpg");
     expect(summarized.covers).toEqual([
-      "https://airav.io/airav_cover.jpg",
       "https://javbus.com/big_cover.jpg",
+      "https://airav.io/airav_cover.jpg",
     ]);
+  });
+
+  it("should smoothly fallback to AirAV cover when JavBus lacks cover", () => {
+    const javbusWithoutCover: Partial<MovieInfo> = {
+      ...mockJavbus,
+      cover: "",
+      big_cover: "",
+      covers: [],
+      big_covers: [],
+    };
+    const mockAirav: Partial<MovieInfo> = {
+      dvdid: "IPX-177",
+      title: "相思相愛的溫泉旅行 (官方中文版)",
+      cover: "https://airav.io/airav_cover.jpg",
+      plot: "AirAV 的中文劇情簡介",
+    };
+
+    const summarized = summarizeMovieResults(
+      { javbus: javbusWithoutCover, airav: mockAirav },
+      ["javbus", "airav"]
+    );
+
+    expect(summarized.cover).toBe("https://airav.io/airav_cover.jpg");
+    expect(summarized.covers).toEqual(["https://airav.io/airav_cover.jpg"]);
   });
 
   it("should still downgrade javdb watermarked cover when javdb is placed first in priorityOrder", () => {
