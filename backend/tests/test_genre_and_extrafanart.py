@@ -257,3 +257,56 @@ def test_save_extra_fanarts_cleans_stale_files(tmp_path: Path):
     assert not (extra_dir / "1.jpg").exists(), "残留的 1.jpg 应被清理"
     assert not (extra_dir / "2.jpg").exists(), "残留的 2.jpg 应被清理"
 
+
+def test_clean_movie_genres_prevents_duplicate_tag_splitting():
+    """测试当同一分类在 ID 映射与文本别名映射名称不一致时，严格只保留一个，杜绝分类分裂。"""
+    # 模拟场景：tags?c4=91 在词典中映射为 '乳房'，但网页文本为 '美乳'
+    g_map = get_genre_map("unified")
+    orig_mapping = g_map.id_to_genre.get("tags?c4=91")
+    try:
+        g_map.id_to_genre["tags?c4=91"] = "乳房"
+        g_map.id_to_aliases.setdefault("tags?c4=91", set()).update({"美乳", "Breasts", "乳房"})
+
+        info = MovieInfo(
+            dvdid="SNOS-174",
+            title="测试不分裂标签",
+            cover="https://example.com/cover.jpg",
+            genre_id=["tags?c7=11", "tags?c4=91", "tags?c1=157"],
+            genre=["戲劇", "美乳", "白天出軌"],
+        )
+        cleaned = clean_movie_genres(info)
+        # 结果中应仅有 '乳房'，绝对不得同时存在 '美乳'
+        assert "乳房" in cleaned
+        assert "美乳" not in cleaned
+        assert "戏剧" in cleaned
+        assert "白天出轨" in cleaned
+        assert len(cleaned) == 3
+    finally:
+        if orig_mapping is not None:
+            g_map.id_to_genre["tags?c4=91"] = orig_mapping
+
+
+def test_clean_movie_genres_honors_id_blacklist_and_prevents_alias_resurrection():
+    """测试当某分类 ID 显式映射为空（黑名单剔除）时，其对应的网页文本标签不会在随后的文本通道中被重新引入。"""
+    g_map = get_genre_map("unified")
+    orig_mapping = g_map.id_to_genre.get("tags?c7=348")
+    try:
+        # 显式将 tags?c7=348 (無碼破解) 设为黑名单剔除
+        g_map.id_to_genre["tags?c7=348"] = ""
+        g_map.id_to_aliases.setdefault("tags?c7=348", set()).update({"無碼破解", "Uncensored Crack"})
+
+        info = MovieInfo(
+            dvdid="SNOS-174",
+            title="测试黑名单彻底剔除",
+            cover="https://example.com/cover.jpg",
+            genre_id=["tags?c7=11", "tags?c7=348"],
+            genre=["戲劇", "無碼破解"],
+        )
+        cleaned = clean_movie_genres(info)
+        assert "戏剧" in cleaned
+        assert "無碼破解" not in cleaned
+        assert cleaned == ["戏剧"]
+    finally:
+        if orig_mapping is not None:
+            g_map.id_to_genre["tags?c7=348"] = orig_mapping
+

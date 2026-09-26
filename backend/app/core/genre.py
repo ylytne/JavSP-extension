@@ -41,6 +41,7 @@ class GenreMap(dict[str, str]):
         super().__init__()
         self.id_to_genre: dict[str, str] = {}
         self.alias_to_genre: dict[str, str] = {}
+        self.id_to_aliases: dict[str, set[str]] = {}
         if file_path:
             self.load_csv(file_path)
 
@@ -69,11 +70,19 @@ class GenreMap(dict[str, str]):
                             self.id_to_genre[raw_id] = translate
 
                     # 2. 收录原始语言别名列（如 zh_tw, zh_cn, ja, en, translate）
+                    row_aliases: set[str] = set()
                     for col in ("zh_tw", "zh_cn", "ja", "en", "translate"):
                         alias = (row.get(col) or "").strip()
                         if alias:
+                            row_aliases.add(alias)
                             if overwrite or alias not in self.alias_to_genre:
                                 self.alias_to_genre[alias] = translate
+
+                    # 3. 关联原始 ID 与其包含的所有别名形态
+                    if raw_id:
+                        if raw_id not in self.id_to_aliases:
+                            self.id_to_aliases[raw_id] = set()
+                        self.id_to_aliases[raw_id].update(row_aliases)
         except Exception as e:
             logger.error("读取分类映射文件 %s 失败: %s", path, e)
 
@@ -204,10 +213,11 @@ def clean_movie_genres(info: MovieInfo, site: str | None = None) -> list[str]:
 
     candidates: list[str] = []
     has_text_genres = bool(info.genre)
+    consumed_aliases: set[str] = set()
 
-    # 1. 优先使用原始分类 ID (genre_id)
+    # 1. 优先使用原始分类 ID (genre_id) 进行精准规范化
     if info.genre_id:
-        for raw_gid in info.genre_id:
+        for idx, raw_gid in enumerate(info.genre_id):
             gid = raw_gid.strip()
             if not gid:
                 continue
@@ -216,6 +226,22 @@ def clean_movie_genres(info: MovieInfo, site: str | None = None) -> list[str]:
                 mapped_val = g_map.resolve_canonical(g_map.id_to_genre[gid])
                 if mapped_val and mapped_val not in candidates:
                     candidates.append(mapped_val)
+
+                # 记录该 ID 关联的所有语言别名与译文，防止后续文本通道二次将其作为同义词重复添加
+                aliases = g_map.id_to_aliases.get(gid)
+                if aliases:
+                    consumed_aliases.update(aliases)
+                if mapped_val:
+                    consumed_aliases.add(mapped_val)
+
+                # 若同索引位置的文字标签确为该 ID 对应的文本（在别名集中或与译文一致），标记为已消费
+                if info.genre and idx < len(info.genre):
+                    paired_text = info.genre[idx].strip()
+                    if paired_text:
+                        if aliases and paired_text in aliases:
+                            consumed_aliases.add(paired_text)
+                        elif paired_text == mapped_val:
+                            consumed_aliases.add(paired_text)
             elif not has_text_genres:
                 # 仅在没有任何文字标签可用时，才将未映射的 ID 保留
                 if gid not in candidates:
@@ -226,6 +252,10 @@ def clean_movie_genres(info: MovieInfo, site: str | None = None) -> list[str]:
         for item in info.genre:
             name = item.strip()
             if not name:
+                continue
+
+            # 若该标签已被 genre_id 对应解析或明确剔除（黑名单/同义词），直接跳过
+            if name in consumed_aliases:
                 continue
 
             if name in g_map.alias_to_genre:
