@@ -160,11 +160,31 @@ export {
 
 export * from "./dvdid";
 export * from "./proxyfree";
+import {
+  cleanMovieInfoTitle,
+  extractActorVariants,
+  removeTrailingActorName,
+  cleanActressName,
+} from "./summarizer";
+
+export {
+  cleanMovieInfoTitle,
+  extractActorVariants,
+  removeTrailingActorName,
+  cleanActressName,
+};
 
 export abstract class BaseCrawler implements ICrawler {
   abstract name: string;
   abstract baseUrl: string;
   abstract scrape(dvdid: string, config?: RequestRetryConfig): Promise<Partial<MovieInfo>>;
+
+  /**
+   * 对爬取的单源元数据执行标题尾部女优名清洗 (第 1 重：单源就地自清洗)
+   */
+  protected cleanTitle<T extends Partial<MovieInfo>>(info: T): T {
+    return cleanMovieInfoTitle(info);
+  }
 
   /**
    * 发起网络请求并解析为 DOM Document（支持域名级 TabBridge 绕过、超时控制与智能重试；遭遇反爬阻断时自动记录并永久降级）。

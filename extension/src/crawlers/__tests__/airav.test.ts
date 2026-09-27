@@ -96,7 +96,7 @@ describe("AirAVCrawler (DOM SSR)", () => {
 
     expect(result.dvdid).toBe("SNOS-168");
     expect(result.url).toBe("https://airav.io/video?hid=QC-BT-4545326");
-    expect(result.title).toBe("最初也是最後的極限挑戰。2個月禁慾後的潛在覺醒性愛 河北彩伽");
+    expect(result.title).toBe("最初也是最後的極限挑戰。2個月禁慾後的潛在覺醒性愛");
     expect(result.cover).toBe("https://airav.io/storage/cover/big/QC-BT-4545326.jpg");
     expect(result.publish_date).toBe("2026-03-20");
     expect(result.plot).toBe("河北彩伽，無盡的美女，想看她的極致。");

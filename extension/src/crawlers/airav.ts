@@ -309,7 +309,7 @@ export class AirAVCrawler extends BaseCrawler {
       }
     }
 
-    return {
+    return this.cleanTitle({
       dvdid: exactDvdid,
       url: detailUrl,
       title: title || undefined,
@@ -324,6 +324,6 @@ export class AirAVCrawler extends BaseCrawler {
       publish_date: publishDate,
       producer,
       preview_video: previewVideo,
-    };
+    });
   }
 }

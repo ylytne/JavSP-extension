@@ -77,7 +77,7 @@ export class JavDBCrawler extends BaseCrawler {
     const metaText = box.querySelector("div.meta")?.textContent?.trim() || "";
     const dateMatch = metaText.match(/\d{4}-\d{2}-\d{2}/);
 
-    return {
+    return this.cleanTitle({
       dvdid,
       url,
       title: cleanTitle || rawTitle,
@@ -89,7 +89,7 @@ export class JavDBCrawler extends BaseCrawler {
       genre: [],
       actress: [],
       preview_pics: [],
-    };
+    });
   }
 
   /**
@@ -208,7 +208,7 @@ export class JavDBCrawler extends BaseCrawler {
       if (href) magnets.push(href);
     });
 
-    return {
+    return this.cleanTitle({
       dvdid,
       url,
       title: cleanTitle || rawTitle,
@@ -230,6 +230,6 @@ export class JavDBCrawler extends BaseCrawler {
       preview_video: previewVideo,
       uncensored,
       magnet: magnets,
-    };
+    });
   }
 }

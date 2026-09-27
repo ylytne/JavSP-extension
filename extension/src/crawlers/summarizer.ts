@@ -24,7 +24,9 @@ export function removeTrailingActorName(title: string, actors: string[]): string
     "u"
   );
   const match = title.match(pattern);
-  return match ? match[1].trim() : title;
+  if (!match) return title;
+  const cleaned = match[1].trim();
+  return cleaned || title;
 }
 
 /**
@@ -36,6 +38,63 @@ export function cleanActressName(name: string): string {
   // 移除半角与全角圆括号、方括号及其中的别名内容
   const cleaned = trimmed.replace(/\s*[（\(［\[][^（\(［\[）\)］\]]*[）\)］\]]/g, "").trim();
   return cleaned || trimmed;
+}
+
+/**
+ * 提取女优名字的所有可能变体（包含原始名称、剥离括号别名后的主名、以及提取括号内部的内容作为独立别名）
+ */
+export function extractActorVariants(actors: string[]): string[] {
+  if (!actors || actors.length === 0) return [];
+  const variants = new Set<string>();
+
+  for (const act of actors) {
+    if (!act) continue;
+    const trimmed = act.trim();
+    if (!trimmed) continue;
+
+    // 1. 原始名称
+    variants.add(trimmed);
+
+    // 2. 剥离别名括号后的主名 (例如: "めぐり（藤浦めぐ）" -> "めぐり")
+    const cleaned = cleanActressName(trimmed);
+    if (cleaned) {
+      variants.add(cleaned);
+    }
+
+    // 3. 提取括号内部的内容作为独立别名 (例如: "河北彩伽（河北彩花）" -> "河北彩花")
+    const aliasMatches = trimmed.matchAll(/[（\(［\[]([^（\(［\[）\)］\]]+)[）\)］\]]/g);
+    for (const m of aliasMatches) {
+      const alias = m[1]?.trim();
+      if (alias) {
+        variants.add(alias);
+      }
+    }
+  }
+
+  return Array.from(variants);
+}
+
+/**
+ * 对单源爬取的元数据进行标题尾部女优名清洗 (第 1 重：单源就地自清洗)
+ */
+export function cleanMovieInfoTitle<T extends Partial<MovieInfo>>(info: T): T {
+  if (!info.actress || info.actress.length === 0) return info;
+  const variants = extractActorVariants(info.actress);
+  if (variants.length === 0) return info;
+
+  if (info.title) {
+    const cleaned = removeTrailingActorName(info.title, variants);
+    if (isValidTitle(cleaned)) {
+      info.title = cleaned;
+    }
+  }
+  if (info.ori_title) {
+    const cleaned = removeTrailingActorName(info.ori_title, variants);
+    if (isValidTitle(cleaned)) {
+      info.ori_title = cleaned;
+    }
+  }
+  return info;
 }
 
 export interface SummarizerOptions {
@@ -375,16 +434,44 @@ export function summarizeMovieResults(
   }
 
   // -------------------------------------------------------------
-  // 9. 清洗标题尾部女优名
+  // 9. 清洗标题尾部女优名 (第 2 重：跨源全量演员变体池兜底)
   // -------------------------------------------------------------
-  const allActorVariants = Array.from(
-    new Set([...(merged.actress || []), ...rawSelectedActors.map((a) => a.trim()).filter(Boolean)])
-  );
+  const allActorVariants = new Set<string>();
+
+  // 1) 收集所有爬虫源提供的女优名及其变体
+  for (const site of Object.keys(siteData)) {
+    const data = siteData[site];
+    if (data?.actress && Array.isArray(data.actress)) {
+      for (const act of extractActorVariants(data.actress)) {
+        allActorVariants.add(act);
+      }
+    }
+  }
+
+  // 2) 收集最终选中的演员列表及其变体
+  if (merged.actress && Array.isArray(merged.actress)) {
+    for (const act of extractActorVariants(merged.actress)) {
+      allActorVariants.add(act);
+    }
+  }
+
+  // 3) 收集原始选中的 rawSelectedActors
+  for (const act of extractActorVariants(rawSelectedActors)) {
+    allActorVariants.add(act);
+  }
+
+  const actorVariantsList = Array.from(allActorVariants);
   if (merged.title) {
-    merged.title = removeTrailingActorName(merged.title, allActorVariants);
+    const cleaned = removeTrailingActorName(merged.title, actorVariantsList);
+    if (isValidTitle(cleaned)) {
+      merged.title = cleaned;
+    }
   }
   if (merged.ori_title) {
-    merged.ori_title = removeTrailingActorName(merged.ori_title, allActorVariants);
+    const cleaned = removeTrailingActorName(merged.ori_title, actorVariantsList);
+    if (isValidTitle(cleaned)) {
+      merged.ori_title = cleaned;
+    }
   }
 
   // -------------------------------------------------------------

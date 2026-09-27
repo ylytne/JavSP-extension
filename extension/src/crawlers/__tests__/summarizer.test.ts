@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { cleanActressName, removeTrailingActorName, summarizeMovieResults } from "../summarizer";
+import {
+  cleanActressName,
+  removeTrailingActorName,
+  extractActorVariants,
+  cleanMovieInfoTitle,
+  summarizeMovieResults,
+} from "../summarizer";
 import { MovieInfo } from "../types";
 
 describe("cleanActressName", () => {
@@ -28,6 +34,49 @@ describe("cleanActressName", () => {
 
   it("should keep raw name if only parentheses exist", () => {
     expect(cleanActressName("（未知女优）")).toBe("（未知女优）");
+  });
+});
+
+describe("extractActorVariants", () => {
+  it("should extract raw name, cleaned main name, and bracketed alias", () => {
+    const variants = extractActorVariants(["河北彩伽（河北彩花）"]);
+    expect(variants).toContain("河北彩伽（河北彩花）");
+    expect(variants).toContain("河北彩伽");
+    expect(variants).toContain("河北彩花");
+  });
+
+  it("should handle brackets and multiple actresses", () => {
+    const variants = extractActorVariants(["安斋らら［RION］", "三上悠亜"]);
+    expect(variants).toContain("安斋らら［RION］");
+    expect(variants).toContain("安斋らら");
+    expect(variants).toContain("RION");
+    expect(variants).toContain("三上悠亜");
+  });
+
+  it("should handle empty or null input", () => {
+    expect(extractActorVariants([])).toEqual([]);
+  });
+});
+
+describe("cleanMovieInfoTitle", () => {
+  it("should clean trailing actress name in title and ori_title", () => {
+    const info: Partial<MovieInfo> = {
+      title: "最初也是最後的極限挑戰 河北彩伽",
+      ori_title: "相思相愛の温泉旅行 相沢みなみ",
+      actress: ["河北彩伽（河北彩花）", "相沢みなみ"],
+    };
+    const cleaned = cleanMovieInfoTitle(info);
+    expect(cleaned.title).toBe("最初也是最後的極限挑戰");
+    expect(cleaned.ori_title).toBe("相思相愛の温泉旅行");
+  });
+
+  it("should not modify title if no actress present", () => {
+    const info: Partial<MovieInfo> = {
+      title: "纯情女友 相沢みなみ",
+      actress: [],
+    };
+    const cleaned = cleanMovieInfoTitle(info);
+    expect(cleaned.title).toBe("纯情女友 相沢みなみ");
   });
 });
 
@@ -375,5 +424,70 @@ describe("summarizeMovieResults", () => {
         javbus: { dvdid: "IPX-177", cover: "https://javbus.com/cover.jpg" },
       });
     }).toThrow(/缺少必填字段/);
+  });
+
+  it("should clean AirAV Chinese title with Chinese actress name via per-source cleaning", () => {
+    // 业务场景 1：AirAV 自带中文女优名（相澤南），经单源自清洗后成为纯净标题
+    const rawAirav: Partial<MovieInfo> = {
+      dvdid: "IPX-177",
+      title: "相思相愛的溫泉旅行 相澤南",
+      actress: ["相澤南"],
+      cover: "https://airav.io/cover.jpg",
+    };
+    const cleanedAirav = cleanMovieInfoTitle(rawAirav);
+    expect(cleanedAirav.title).toBe("相思相愛的溫泉旅行");
+
+    const javbusData: Partial<MovieInfo> = {
+      dvdid: "IPX-177",
+      title: "相思相愛の温泉旅行 相沢みなみ",
+      actress: ["相沢みなみ"],
+      cover: "https://javbus.com/cover.jpg",
+    };
+
+    const summarized = summarizeMovieResults(
+      { javbus: javbusData, airav: cleanedAirav },
+      ["airav", "javbus"]
+    );
+
+    // 最终标题是干净的中文标题
+    expect(summarized.title).toBe("相思相愛的溫泉旅行");
+    // 演员字段采纳 JavBus 的日文名
+    expect(summarized.actress).toEqual(["相沢みなみ"]);
+  });
+
+  it("should clean AirAV Chinese title using cross-source actor pool even if AirAV actress field is missing", () => {
+    // 业务场景 2：AirAV 页面因编辑疏漏缺失了 actress 字段，但标题带中文女优名
+    // 而 JavDB 提取到了包含相澤南的演员信息，JavBus 独占了写入 NFO 的演员
+    const airavWithoutActress: Partial<MovieInfo> = {
+      dvdid: "IPX-177",
+      title: "相思相愛的溫泉旅行 相澤南",
+      actress: [],
+      cover: "https://airav.io/cover.jpg",
+    };
+
+    const javdbData: Partial<MovieInfo> = {
+      dvdid: "IPX-177",
+      title: "相思相愛 温泉旅行",
+      actress: ["相澤南（相沢みなみ）"],
+      cover: "https://javdb.com/cover.jpg",
+    };
+
+    const javbusData: Partial<MovieInfo> = {
+      dvdid: "IPX-177",
+      title: "相思相愛の温泉旅行",
+      actress: ["相沢みなみ"],
+      cover: "https://javbus.com/cover.jpg",
+    };
+
+    const summarized = summarizeMovieResults(
+      { javbus: javbusData, javdb: javdbData, airav: airavWithoutActress },
+      ["airav", "javbus", "javdb"]
+    );
+
+    // 跨源演员池全量兜底：即使 AirAV 自身没有演员标签，跨源演员池提取到了 JavDB 的“相澤南”，
+    // 成功从 AirAV 的标题中洗掉了“相澤南”！
+    expect(summarized.title).toBe("相思相愛的溫泉旅行");
+    // NFO 写入的演员依旧严格由单源（JavBus）独占，保持日文原名
+    expect(summarized.actress).toEqual(["相沢みなみ"]);
   });
 });

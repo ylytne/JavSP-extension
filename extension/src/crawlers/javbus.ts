@@ -111,7 +111,7 @@ export class JavBusCrawler extends BaseCrawler {
       }
     });
 
-    return {
+    return this.cleanTitle({
       dvdid: exactDvdid,
       url,
       title: cleanTitle || rawTitle,
@@ -131,6 +131,6 @@ export class JavBusCrawler extends BaseCrawler {
       actress_pics: actressPics,
       preview_pics: previewPics,
       uncensored,
-    };
+    });
   }
 }
