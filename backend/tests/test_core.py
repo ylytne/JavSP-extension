@@ -559,3 +559,67 @@ def test_organize_movie_with_ultra_long_title(tmp_path):
     assert f"<title>SNOS-074-C {ultra_long_title}</title>" in nfo_content or ultra_long_title in nfo_content
 
 
+def test_clean_plot_text():
+    """测试剧情简介 clean_plot_text 的各种边界与清洗规则。"""
+    from app.core.nfo import clean_plot_text
+    from app.config import get_config
+
+    cfg = get_config().model_copy(deep=True)
+
+    # 1. 基础 AirAV 格式 (带空格)
+    res = clean_plot_text("SNOS-030 实际简介 - airav.io", num="SNOS-030", config=cfg)
+    assert res == "实际简介"
+
+    # 2. 紧贴无空格格式
+    res = clean_plot_text("SNOS-030实际简介- airav.io", num="SNOS-030", config=cfg)
+    assert res == "实际简介"
+
+    # 3. 带引用符号或引号格式 (确保引号原样保留，番号与站点安全剥离)
+    res = clean_plot_text('SNOS-030 "实际简介" - airav.io', num="SNOS-030", config=cfg)
+    assert res == '"实际简介"'
+
+    # 4. 带中括号与全角括号
+    res = clean_plot_text("[SNOS-030] 真实介绍内容 - airav.io", num="SNOS-030", config=cfg)
+    assert res == "真实介绍内容"
+    res = clean_plot_text("【SNOS-030】真实介绍内容 - airav.io", num="SNOS-030", config=cfg)
+    assert res == "真实介绍内容"
+
+    # 5. 带冒号格式
+    res = clean_plot_text("SNOS-030: 真实介绍内容 - airav.io", num="SNOS-030", config=cfg)
+    assert res == "真实介绍内容"
+
+    # 6. 配置项写为不带前置空格的 '- airav.io'，仍可完美剥离且末尾无多余空格
+    cfg.summarizer.nfo.plot_clean_patterns = ["- airav.io"]
+    res = clean_plot_text("SNOS-030 真实介绍内容 - airav.io", num="SNOS-030", config=cfg)
+    assert res == "真实介绍内容"
+
+    # 7. 不区分大小写
+    res = clean_plot_text("snos-030 真实介绍内容 - AIRAV.IO", num="SNOS-030", config=cfg)
+    assert res == "真实介绍内容"
+
+    # 8. 关闭 clean_plot_num 时保留番号前缀
+    cfg.summarizer.nfo.clean_plot_num = False
+    res = clean_plot_text("SNOS-030 真实介绍内容 - airav.io", num="SNOS-030", config=cfg)
+    assert res == "SNOS-030 真实介绍内容"
+
+    # 9. 关闭 clean_plot 时完全不处理
+    cfg.summarizer.nfo.clean_plot = False
+    res = clean_plot_text("SNOS-030 真实介绍内容 - airav.io", num="SNOS-030", config=cfg)
+    assert res == "SNOS-030 真实介绍内容 - airav.io"
+
+
+def test_generate_nfo_content_with_plot_cleaning():
+    """测试 generate_nfo_content 在生成 NFO 时正确清理 plot 标签。"""
+    from app.core.nfo import generate_nfo_content
+
+    info = MovieInfo(
+        dvdid="SNOS-030",
+        title="测试影片",
+        plot='SNOS-030 "实际简介" - airav.io',
+    )
+    xml_str = generate_nfo_content(info)
+    assert '<plot>"实际简介"</plot>' in xml_str
+    assert "SNOS-030" not in xml_str.split("<plot>")[1].split("</plot>")[0]
+    assert "airav.io" not in xml_str
+
+

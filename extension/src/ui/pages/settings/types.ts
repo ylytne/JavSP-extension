@@ -53,6 +53,9 @@ export interface SummarizerNfoConfig {
   custom_tags_fields: string[];
   actress_thumb_mode?: "none" | "local";
   include_trailer?: boolean;
+  clean_plot?: boolean;
+  clean_plot_num?: boolean;
+  plot_clean_patterns?: string[];
 }
 
 export interface SummarizerCoverCropConfig {
@@ -138,7 +141,15 @@ export interface SettingsProps {
   wsState: "disconnected" | "connecting" | "connected";
 }
 
-export type TabType = "scanner" | "network" | "summarizer" | "media" | "translator" | "server" | "about";
+export type TabType =
+  | "scanner"
+  | "network"
+  | "summarizer"
+  | "media"
+  | "nfo"
+  | "translator"
+  | "server"
+  | "about";
 
 export type BackendRunMode = "source" | "binary" | "docker" | "unknown";
 

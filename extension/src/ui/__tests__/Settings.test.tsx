@@ -6,6 +6,7 @@ import { ScannerTab } from "../pages/settings/tabs/ScannerTab";
 import { NetworkTab } from "../pages/settings/tabs/NetworkTab";
 import { SummarizerTab } from "../pages/settings/tabs/SummarizerTab";
 import { MediaTab } from "../pages/settings/tabs/MediaTab";
+import { NfoTab } from "../pages/settings/tabs/NfoTab";
 import { TranslatorTab } from "../pages/settings/tabs/TranslatorTab";
 import { FullAppConfig } from "../pages/settings/types";
 
@@ -309,5 +310,34 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
     expect(container.textContent).toContain("翻译目标语言");
     expect(container.textContent).toContain("翻译服务提供方");
     expect(container.textContent).toContain("影片标题 (title)");
+  });
+
+  it("NfoTab 应能正确渲染标题模板、剧情简介清理并支持删除规则", async () => {
+    let currentConfig = JSON.parse(JSON.stringify(mockConfig));
+    currentConfig.summarizer.nfo.clean_plot = true;
+    currentConfig.summarizer.nfo.clean_plot_num = true;
+    currentConfig.summarizer.nfo.plot_clean_patterns = [" - airav.io"];
+    const updateForm = vi.fn((updater) => {
+      currentConfig = updater(currentConfig);
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<NfoTab formConfig={currentConfig} updateForm={updateForm} />);
+    });
+
+    expect(container.textContent).toContain("NFO 影片标题模板");
+    expect(container.textContent).toContain("剧情简介 (Plot) 清理设置");
+    expect(container.textContent).toContain("清理简介开头的番号前缀");
+    expect(container.textContent).toContain(" - airav.io");
+
+    // 找到删除按钮并点击
+    const deleteBtn = container.querySelector("button[title='删除该规则']") as HTMLButtonElement;
+    expect(deleteBtn).not.toBeNull();
+    await act(async () => {
+      deleteBtn.click();
+    });
+    expect(updateForm).toHaveBeenCalled();
+    expect(currentConfig.summarizer.nfo.plot_clean_patterns).toEqual([]);
   });
 });

@@ -10,6 +10,7 @@ import {
   X,
   CheckCircle2,
   Info,
+  FileText,
 } from "lucide-react";
 
 import { FullAppConfig, SettingsProps, TabType } from "./settings/types";
@@ -22,6 +23,7 @@ import { ScannerTab } from "./settings/tabs/ScannerTab";
 import { NetworkTab } from "./settings/tabs/NetworkTab";
 import { SummarizerTab } from "./settings/tabs/SummarizerTab";
 import { MediaTab } from "./settings/tabs/MediaTab";
+import { NfoTab } from "./settings/tabs/NfoTab";
 import { TranslatorTab } from "./settings/tabs/TranslatorTab";
 import { ServerTab } from "./settings/tabs/ServerTab";
 import { AboutTab } from "./settings/tabs/AboutTab";
@@ -107,12 +109,13 @@ export const Settings: React.FC<SettingsProps> = ({ wsState }) => {
           <div className="flex border-b border-slate-200 bg-slate-50/70 overflow-x-auto text-xs font-semibold">
             {[
               { key: "scanner", label: "扫描识别", icon: Folder },
-              { key: "network", label: "抓取与网络", icon: Globe },
-              { key: "summarizer", label: "归档与整理", icon: FolderArchive },
-              { key: "media", label: "媒体与剧照", icon: ImageIcon },
-              { key: "translator", label: "翻译引擎", icon: Languages },
+              { key: "network", label: "爬虫设置", icon: Globe },
+              { key: "summarizer", label: "文件整理", icon: FolderArchive },
+              { key: "media", label: "海报/剧照", icon: ImageIcon },
+              { key: "nfo", label: "NFO元数据", icon: FileText },
+              { key: "translator", label: "翻译", icon: Languages },
               { key: "server", label: "服务网络", icon: Server },
-              { key: "about", label: "关于与更新", icon: Info },
+              { key: "about", label: "关于/更新", icon: Info },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
@@ -171,6 +174,10 @@ export const Settings: React.FC<SettingsProps> = ({ wsState }) => {
 
             {activeTab === "media" && formConfig && (
               <MediaTab formConfig={formConfig} updateForm={updateForm} />
+            )}
+
+            {activeTab === "nfo" && formConfig && (
+              <NfoTab formConfig={formConfig} updateForm={updateForm} />
             )}
 
             {activeTab === "translator" && formConfig && (

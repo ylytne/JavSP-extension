@@ -1,10 +1,5 @@
 import React from "react";
 import { FullAppConfig } from "../types";
-import {
-  NFO_TITLE_VARS,
-  VariablePillSelector,
-  MediaTitlePreview,
-} from "../components/TemplatePreview";
 
 interface MediaTabProps {
   formConfig: FullAppConfig;
@@ -12,48 +7,8 @@ interface MediaTabProps {
 }
 
 export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) => {
-  const insertTemplateVar = (varName: string) => {
-    updateForm((cfg) => {
-      cfg.summarizer.nfo.title_pattern += varName;
-      return cfg;
-    });
-  };
-
   return (
     <div className="space-y-4">
-      {/* NFO 标题模板配置卡片 */}
-      <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-3">
-        <div className="space-y-1.5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <div>
-              <label className="text-xs font-bold text-slate-700">
-                NFO 影片标题模板 (nfo.title_pattern)
-              </label>
-              <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                写入影片 NFO 的 <code className="text-indigo-600 font-mono font-semibold">&lt;title&gt;</code> 节点。Emby / Jellyfin / Kodi 等媒体中心导入后，海报墙与详情页展示的影视标题以此为准。
-              </p>
-            </div>
-            <VariablePillSelector
-              vars={NFO_TITLE_VARS}
-              onInsert={insertTemplateVar}
-            />
-          </div>
-          <input
-            type="text"
-            value={formConfig.summarizer.nfo.title_pattern}
-            onChange={(e) =>
-              updateForm((cfg) => {
-                cfg.summarizer.nfo.title_pattern = e.target.value;
-                return cfg;
-              })
-            }
-            placeholder="{num} {title}"
-            className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          {/* 实时媒体库标题显示效果预览 */}
-          <MediaTitlePreview pattern={formConfig.summarizer.nfo.title_pattern} />
-        </div>
-      </div>
 
       {/* 海报与角标 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -392,57 +347,6 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
             </div>
           </div>
         )}
-      </div>
-
-      {/* 预告视频链接写入设置 (<trailer>) */}
-      <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={formConfig.summarizer.nfo.include_trailer ?? false}
-              onChange={(e) =>
-                updateForm((cfg) => {
-                  cfg.summarizer.nfo.include_trailer = e.target.checked;
-                  return cfg;
-                })
-              }
-              className="rounded text-indigo-600 focus:ring-indigo-500"
-            />
-            <span className="text-xs font-bold text-slate-800">
-              写入预告视频链接到 NFO (&lt;trailer&gt;)
-            </span>
-          </div>
-          <span className={`text-[11px] font-mono ${
-            (formConfig.summarizer.nfo.include_trailer ?? false)
-              ? "text-amber-600 font-semibold"
-              : "text-slate-400"
-          }`}>
-            {(formConfig.summarizer.nfo.include_trailer ?? false) ? "已开启 (有风险)" : "已禁用 (推荐)"}
-          </span>
-        </div>
-
-        {/* 醒目风险提示框 */}
-        <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg text-amber-900 text-[11px] space-y-1.5 leading-relaxed">
-          <div className="flex items-center gap-1.5 font-bold text-amber-950">
-            <span className="text-sm">⚠️</span>
-            <span>高危风险与不稳定性警示：</span>
-          </div>
-          <ul className="list-disc list-inside space-y-1 text-amber-900/90 pl-1">
-            <li>
-              <strong>切片流或在线全片风险</strong>：部分站点（如 AirAV）抓取到的视频流实为第三方在线播放站点的 m3u8 切片流，甚至是在线全片流，并非官方剪辑的 Sample 预告片；
-            </li>
-            <li>
-              <strong>时效性与死链</strong>：第三方在线流通常带有防盗链鉴权、时效 Token 或动态 IP 绑定，数天后极易彻底失效（403/404），相关域名亦常遭 GFW 封锁；
-            </li>
-            <li>
-              <strong>媒体服务器卡死</strong>：在 Jellyfin / Emby 中，若开启了“影院模式”（正片前播放预告片）或 TV 端的自动背景预览，遇到无法连通的 m3u8 时可能导致<strong>正片播放卡死 30~60 秒甚至抛出播放错误</strong>。
-            </li>
-          </ul>
-          <p className="text-[10.5px] text-amber-800 pt-0.5 font-medium">
-            💡 <strong>强烈建议保持禁用</strong>。直接抓取预告片/全片视频到本地不是本项目的目标，本项目的目标仅限于刮削信息。如需预告片，推荐在影片同级目录下手动放置本地离线文件（如 <code className="font-mono bg-amber-100/60 px-1 py-0.5 rounded">movie-trailer.mp4</code>）。
-          </p>
-        </div>
       </div>
     </div>
   );

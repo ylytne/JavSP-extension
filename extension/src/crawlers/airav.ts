@@ -233,6 +233,16 @@ export class AirAVCrawler extends BaseCrawler {
       }
     }
 
+    if (plot) {
+      // 剥离简介尾部的站点标示（如 " - airav.io" 或镜像域名，并剥离前后空格）
+      plot = plot.replace(new RegExp(`\\s*-?\\s*(${hostSuffix})\\s*$`, "i"), "").trim();
+      // 剔除简介前面的番号（无论是带空格还是无空格）
+      plot = cleanDvdidPrefix(plot, exactDvdid);
+      if (!plot.trim()) {
+        plot = undefined;
+      }
+    }
+
     // 发行日期提取
     let publishDate: string | undefined;
     const dateIcon = doc.querySelector(".video-item .fa-clock, .fa-clock");

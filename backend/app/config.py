@@ -104,6 +104,9 @@ class SummarizerNfoConfig(BaseModel):
     custom_tags_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])
     actress_thumb_mode: Literal["none", "local"] = "none"
     include_trailer: bool = False
+    clean_plot: bool = True
+    clean_plot_num: bool = True
+    plot_clean_patterns: list[str] = Field(default_factory=lambda: [" - airav.io"])
 
 
 class SummarizerCropConfig(BaseModel):

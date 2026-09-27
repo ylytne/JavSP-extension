@@ -84,13 +84,13 @@ export function cleanDvdidPrefix(title: string, dvdid: string): string {
       prefixPattern = "FC2(?:[-_\\s]*PPV)?";
     }
     const pattern = new RegExp(
-      `^\\s*[\\[【(]?\\s*${prefixPattern}[-_\\s]*0*${strippedNum}\\s*[\\]】)]?\\s*`,
+      `^\\s*[\\[【(]?\\s*${prefixPattern}[-_\\s]*0*${strippedNum}\\s*[\\]】)]?\\s*[:：\\-—_]?\\s*`,
       "i"
     );
     return title.replace(pattern, "").trim();
   }
   const escaped = clean.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
-  const pattern = new RegExp(`^\\s*[\\[【(]?\\s*${escaped}\\s*[\\]】)]?\\s*`, "i");
+  const pattern = new RegExp(`^\\s*[\\[【(]?\\s*${escaped}\\s*[\\]】)]?\\s*[:：\\-—_]?\\s*`, "i");
   return title.replace(pattern, "").trim();
 }
 

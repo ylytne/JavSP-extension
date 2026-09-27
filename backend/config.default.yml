@@ -93,6 +93,13 @@ summarizer:
     # - false (推荐默认): 不生成 <trailer> 标签。部分站点抓取的 m3u8 实为第三方在线切片流，极易失效/被墙，在 Jellyfin 影院模式下可能导致严重播放卡死
     # - true: 允许写入抓取到的预告视频链接 (仅在网络通畅且需要预告流时开启)
     include_trailer: false
+    # 是否开启 NFO 剧情简介 (plot) 清理 (默认开启)
+    clean_plot: true
+    # 是否清理剧情简介开头出现的番号 (默认开启，自动消除番号与简介之间的空格或分隔符)
+    clean_plot_num: true
+    # 剧情简介中需要清理的自定义文本或正则列表（不区分大小写，自动消除前后空格）
+    plot_clean_patterns:
+    - ' - airav.io'
   censor_options_representation:
   - 无码
   - 有码

@@ -383,5 +383,44 @@ describe("AirAVCrawler (DOM SSR)", () => {
     expect(result.url).toBe("https://airavplus2.cc/video?hid=test-mirror");
     expect(result.title).toBe("相思相愛 溫泉旅行");
   });
+
+  it("should sanitize dirty plot containing leading dvdid and trailing host suffix (e.g. SNOS-030 实际简介 - airav.io)", async () => {
+    const crawler = new AirAVCrawler("https://airav.io");
+
+    const searchHtml = `
+      <div class="col oneVideo">
+        <div class="card">
+          <a href="/video?hid=test-dirty-plot"></a>
+          <h5>SNOS-030 实际简介</h5>
+        </div>
+      </div>
+    `;
+    const detailHtml = `
+      <html>
+        <head>
+          <title>SNOS-030 实际简介 - airav.io</title>
+          <meta property="og:description" content="SNOS-030 实际简介 - airav.io">
+        </head>
+        <body>
+          <div class="video-title">
+            <h1>SNOS-030 实际简介</h1>
+          </div>
+          <div class="video-info">
+            <p>SNOS-030 实际简介 - airav.io</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    vi.spyOn(crawler, "fetchDocument").mockImplementation(async (url: string) => {
+      if (url.includes("search_result")) {
+        return new DOMParser().parseFromString(searchHtml, "text/html");
+      }
+      return new DOMParser().parseFromString(detailHtml, "text/html");
+    });
+
+    const result = await crawler.scrape("SNOS-030");
+    expect(result.plot).toBe("实际简介");
+  });
 });
 

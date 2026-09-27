@@ -15,6 +15,7 @@ import {
 } from "../pages/settings/components/TemplatePreview";
 import { SummarizerTab } from "../pages/settings/tabs/SummarizerTab";
 import { MediaTab } from "../pages/settings/tabs/MediaTab";
+import { NfoTab } from "../pages/settings/tabs/NfoTab";
 import { FullAppConfig } from "../pages/settings/types";
 
 // @ts-ignore
@@ -285,7 +286,7 @@ describe("TemplatePreview 核心函数与组件测试", () => {
       expect(currentCfg.summarizer.path.output_folder_pattern).toContain("{year}");
     });
 
-    it("MediaTab 应渲染媒体库实时预览并在输入变化时动态联动", async () => {
+    it("NfoTab 应渲染媒体库实时预览并在输入变化时动态联动", async () => {
       let currentCfg = JSON.parse(JSON.stringify(mockFullConfig));
       const updateForm = vi.fn((updater) => {
         currentCfg = updater(currentCfg);
@@ -293,7 +294,7 @@ describe("TemplatePreview 核心函数与组件测试", () => {
       const root = createRoot(container);
 
       await act(async () => {
-        root.render(<MediaTab formConfig={currentCfg} updateForm={updateForm} />);
+        root.render(<NfoTab formConfig={currentCfg} updateForm={updateForm} />);
       });
 
       expect(container.textContent).toContain("媒体中心 (Emby / Jellyfin / Kodi) 显示效果实时预览");

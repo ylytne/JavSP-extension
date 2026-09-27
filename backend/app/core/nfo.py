@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 from lxml.builder import E
 from lxml.etree import tostring
 
@@ -12,7 +13,86 @@ from app.core.actress import clean_movie_actresses
 from app.core.genre import clean_movie_genres
 from app.core.models import MovieInfo, SafeDict
 
-__all__ = ["write_nfo", "generate_nfo_content"]
+__all__ = ["write_nfo", "generate_nfo_content", "clean_plot_text"]
+
+
+def clean_plot_text(
+    plot: str | None,
+    num: str | None = None,
+    config: AppConfig | None = None,
+    safe_dict: SafeDict | dict[str, Any] | None = None,
+) -> str:
+    """清洗剧情简介 (plot) 文本。
+
+    1. 若未开启 clean_plot，直接返回原文本（去除首尾空白）；
+    2. 若开启 clean_plot_num 且提供了番号 num：
+       识别并剥离简介开头的番号（包含各类全半角括号变体、冒号、连字符，以及紧随的空格）；
+    3. 遍历 plot_clean_patterns 规则列表：
+       支持模板插值（如 {num} 等）；
+       对于普通文本模式，支持前后空白容差匹配；对于正则模式直接正则替换；
+    4. 执行最终 strip()，消除末尾残留空格。
+    """
+    if not plot or not isinstance(plot, str):
+        return ""
+
+    cfg = config or get_config()
+    nfo_cfg = cfg.summarizer.nfo
+
+    if not nfo_cfg.clean_plot:
+        return plot.strip()
+
+    text = plot.strip()
+
+    # 1. 清洗简介开头出现的番号
+    if nfo_cfg.clean_plot_num and num and num.strip():
+        clean_num = num.strip()
+        num_parts = [re.escape(clean_num)]
+        # 若番号中包含 '-' 或 '_'，同时兼容无连字符的形式（例如 SNOS-030 与 SNOS030）
+        num_no_sep = re.sub(r"[\-_]", "", clean_num)
+        if num_no_sep and num_no_sep != clean_num:
+            num_parts.append(re.escape(num_no_sep))
+
+        num_regex = "|".join(num_parts)
+        # 匹配开头的可选括号、番号本身、可选的闭括号、可选的冒号/连字符/下划线、以及紧随其后的任意数量空白字符
+        leading_num_pattern = re.compile(
+            rf"^\s*(?:[\[\(【（]?\s*(?:{num_regex})\s*[\]\)】）]?)\s*[:：\-—_]?\s*",
+            re.IGNORECASE,
+        )
+        text = leading_num_pattern.sub("", text)
+
+    # 2. 清洗自定义规则列表 (plot_clean_patterns)
+    patterns = nfo_cfg.plot_clean_patterns or []
+    for pat in patterns:
+        if not pat or not pat.strip():
+            continue
+
+        # 模板变量插值 (如包含 {num} 等)
+        if safe_dict is not None:
+            try:
+                formatted_pat = pat.format_map(safe_dict)
+            except Exception:
+                formatted_pat = pat
+        elif num:
+            formatted_pat = pat.replace("{num}", num)
+        else:
+            formatted_pat = pat
+
+        # 判断是否为正则表达式语法
+        is_regex = any(ch in formatted_pat for ch in ("^", "$", "\\", ".*", ".+", "(?", "|"))
+        if not is_regex:
+            # 智能空白容差：提取去空白后的纯净子串，前后允许匹配可选空白 \s*
+            # 这样输入 ' - airav.io' 或 '- airav.io' 均能彻底匹配并移除，不会残留末尾空格
+            core_text = formatted_pat.strip()
+            if core_text:
+                regex_tolerant = re.compile(rf"\s*{re.escape(core_text)}\s*", re.IGNORECASE)
+                text = regex_tolerant.sub("", text)
+        else:
+            try:
+                text = re.sub(formatted_pat, "", text, flags=re.IGNORECASE)
+            except re.error:
+                text = text.replace(formatted_pat, "")
+
+    return text.strip()
 
 
 def generate_nfo_content(
@@ -44,9 +124,16 @@ def generate_nfo_content(
     if info.score:
         movie_elem.append(E.rating(str(info.score)))
 
-    # 4. 剧情简介
+    # 4. 剧情简介 (经由 clean_plot_text 清洗番号前缀与脏文本)
     if info.plot:
-        movie_elem.append(E.plot(info.plot))
+        cleaned_plot = clean_plot_text(
+            info.plot,
+            num=info.dvdid or info.cid,
+            config=cfg,
+            safe_dict=safe_dict,
+        )
+        if cleaned_plot:
+            movie_elem.append(E.plot(cleaned_plot))
 
     # 5. 时长
     if info.duration:
