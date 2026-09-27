@@ -274,6 +274,8 @@ def organize_movie(
     # 构造基础文件名 (如 IPX-177 或 IPX-177-C)
     base_name = config.summarizer.path.basename_pattern.format_map(SafeDict(cleaned_dict))
     base_name = replace_illegal_chars(base_name)
+    cleaned_dict["filename"] = base_name
+    cleaned_dict["basename"] = base_name
 
     # 1. 移动或硬链接视频文件与关联字幕文件
     if on_step:
@@ -415,6 +417,8 @@ def organize_movie(
         on_step("WRITING_NFO", "正在写入 NFO 文件")
 
     nfo_basename = config.summarizer.nfo.basename_pattern
+    if not nfo_basename or not nfo_basename.strip():
+        nfo_basename = "{filename}"
     if "{" in nfo_basename and "}" in nfo_basename:
         nfo_filename = f"{replace_illegal_chars(nfo_basename.format_map(SafeDict(cleaned_dict)))}.nfo"
     else:
@@ -731,6 +735,8 @@ def simulate_movie_organization(
     # 基础文件名 (如 IPX-177 或 IPX-177-C)
     base_name = cfg.summarizer.path.basename_pattern.format_map(SafeDict(cleaned_dict))
     base_name = replace_illegal_chars(base_name)
+    cleaned_dict["filename"] = base_name
+    cleaned_dict["basename"] = base_name
 
     # 视频文件名
     ext = Path(test_filename).suffix or ".mp4"
@@ -738,6 +744,8 @@ def simulate_movie_organization(
 
     # NFO 文件名与内容
     nfo_basename = cfg.summarizer.nfo.basename_pattern
+    if not nfo_basename or not nfo_basename.strip():
+        nfo_basename = "{filename}"
     if "{" in nfo_basename and "}" in nfo_basename:
         nfo_filename = f"{replace_illegal_chars(nfo_basename.format_map(SafeDict(cleaned_dict)))}.nfo"
     else:

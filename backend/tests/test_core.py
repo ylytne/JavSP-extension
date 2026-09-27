@@ -280,8 +280,8 @@ def test_organizer_actress_alias_and_deduplication(tmp_path: Path, monkeypatch):
     assert meta.actress == ["涼森れむ"]
     assert "涼森れむ" in meta.actress_pics
 
-    # 验证生成的 NFO XML 文件（默认不写入有毒外链，彻底杜绝外网卡死）
-    nfo_file = p_out / "movie.nfo"
+    # 验证生成的 NFO XML 文件（与视频同名，默认不写入有毒外链，彻底杜绝外网卡死）
+    nfo_file = p_out / "ABF-358-C.nfo"
     assert nfo_file.exists()
     nfo_text = nfo_file.read_text(encoding="utf-8")
     assert nfo_text.count("<actor>") == 1
@@ -552,8 +552,8 @@ def test_organize_movie_with_ultra_long_title(tmp_path):
     assert "None" not in dir_name
     assert dir_name.startswith("[SNOS-074-C]")
 
-    # 验证 NFO 中的 <title> 依然完整保留了原始标题，未被截断或损坏
-    nfo_file = out_path / "movie.nfo"
+    # 验证 NFO 中的 <title> 依然完整保留了原始标题，未被截断或损坏（与视频同名）
+    nfo_file = out_path / "SNOS-074-C.nfo"
     assert nfo_file.is_file()
     nfo_content = nfo_file.read_text(encoding="utf-8")
     assert f"<title>SNOS-074-C {ultra_long_title}</title>" in nfo_content or ultra_long_title in nfo_content

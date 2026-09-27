@@ -98,7 +98,7 @@ class SummarizerDefaultConfig(BaseModel):
 
 class SummarizerNfoConfig(BaseModel):
     """NFO 构造配置。"""
-    basename_pattern: str = "movie"
+    basename_pattern: str = "{filename}"
     title_pattern: str = "{num} {title}"
     custom_genres_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])
     custom_tags_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])

@@ -22,6 +22,8 @@ export const TEMPLATE_SAMPLE_MOVIE: Record<string, string> = {
   censor: "有码",
   label: "Tissue",
   genre: "单体作品,美少女",
+  filename: "IPX-177",
+  basename: "IPX-177",
 };
 
 /**
@@ -141,6 +143,13 @@ export const BASENAME_VARS: TemplateVariableInfo[] = [
   { token: "{year}", label: "年份", example: "2021", description: "发行年份" },
 ];
 
+export const NFO_BASENAME_VARS: TemplateVariableInfo[] = [
+  { token: "{filename}", label: "视频同名", example: "IPX-177", description: "严格跟随视频最终主文件名（推荐默认，完全同名）" },
+  { token: "{num}", label: "番号", example: "IPX-177", description: "标准番号（中字自动带 -C 后缀）" },
+  { token: "{title}", label: "标题", example: "纯情女友大变身...", description: "影片标题" },
+  { token: "movie", label: "movie", example: "movie", description: "Kodi 传统单文件夹规范 (固定生成 movie.nfo)" },
+];
+
 export const NFO_TITLE_VARS: TemplateVariableInfo[] = [
   { token: "{num}", label: "番号", example: "IPX-177", description: "标准番号" },
   { token: "{title}", label: "标题", example: "纯情女友大变身...", description: "影片标题" },
@@ -256,6 +265,7 @@ interface DiskStructurePreviewProps {
   folderPattern: string;
   basenamePattern: string;
   baseDirectory?: string | null;
+  nfoBasenamePattern?: string;
 }
 
 /**
@@ -265,9 +275,17 @@ export const DiskStructurePreview: React.FC<DiskStructurePreviewProps> = ({
   folderPattern,
   basenamePattern,
   baseDirectory,
+  nfoBasenamePattern,
 }) => {
   const pathInfo = parsePathSegments(folderPattern, baseDirectory);
   const formattedBasename = formatTemplate(basenamePattern) || "IPX-177";
+  const effectiveNfoPattern = nfoBasenamePattern?.trim() || "{filename}";
+  const nfoSampleData = {
+    ...TEMPLATE_SAMPLE_MOVIE,
+    filename: formattedBasename,
+    basename: formattedBasename,
+  };
+  const formattedNfoBasename = formatTemplate(effectiveNfoPattern, nfoSampleData) || formattedBasename;
   const cleanFolder = pathInfo.fullDisplayPath.replace(/[/\\]+$/, "");
   const baseDisplay = baseDirectory?.trim() || "D:/download";
 
@@ -322,7 +340,7 @@ export const DiskStructurePreview: React.FC<DiskStructurePreviewProps> = ({
           <div className="flex items-center justify-between gap-2 hover:bg-slate-50 px-1 py-0.5 rounded">
             <div className="flex items-center gap-1.5 truncate">
               <FileText className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span className="text-slate-700">{formattedBasename}.nfo</span>
+              <span className="text-slate-700">{formattedNfoBasename}.nfo</span>
             </div>
             <span className="text-[10px] text-slate-400 shrink-0 font-sans">媒体信息文件（Kodi / Emby 刮削）</span>
           </div>

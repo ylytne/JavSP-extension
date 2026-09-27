@@ -180,6 +180,23 @@ describe("TemplatePreview 核心函数与组件测试", () => {
       expect(container.textContent).not.toContain("D:/download");
       expect(container.textContent).toContain(`E:/MOVIES/${TEMPLATE_SAMPLE_MOVIE.actress}/[${TEMPLATE_SAMPLE_MOVIE.num}]`);
     });
+
+    it("当配置 nfoBasenamePattern 为 movie 时应正确渲染 movie.nfo", async () => {
+      const root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <DiskStructurePreview
+            folderPattern="{actress}/{num}"
+            basenamePattern="{num}"
+            nfoBasenamePattern="movie"
+          />
+        );
+      });
+
+      expect(container.textContent).toContain(`${TEMPLATE_SAMPLE_MOVIE.num}.mp4`);
+      expect(container.textContent).toContain("movie.nfo");
+    });
   });
 
   describe("MediaTitlePreview 媒体中心标题预览", () => {

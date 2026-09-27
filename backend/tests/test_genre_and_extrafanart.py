@@ -174,8 +174,8 @@ def test_organize_movie_with_extrafanart(tmp_path: Path, monkeypatch):
     assert extra_dir.is_dir()
     assert (extra_dir / "0.jpg").is_file()
 
-    # 检查 NFO 中的分类已被规范化
-    nfo_file = organized_dir / "movie.nfo"
+    # 检查 NFO 中的分类已被规范化（与视频同名 MIDE-001.nfo）
+    nfo_file = organized_dir / "MIDE-001.nfo"
     assert nfo_file.is_file()
     nfo_text = nfo_file.read_text(encoding="utf-8")
     assert "<genre>69</genre>" in nfo_text

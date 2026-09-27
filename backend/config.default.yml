@@ -76,7 +76,11 @@ summarizer:
     producer: '#未知制作商'
     publisher: '#未知发行商'
   nfo:
-    basename_pattern: movie
+    # NFO 文件命名规则（无需 .nfo 扩展名）：
+    # - '{filename}' (推荐默认): 与最终视频主文件名严格同名 (例如 SSIS-001.nfo 或 [SSIS-001] 标题.nfo)
+    # - '{num}': 以番号命名 (例如 SSIS-001.nfo)
+    # - 'movie': Kodi / Jellyfin / Emby 经典单电影文件夹规范 (生成 movie.nfo)
+    basename_pattern: '{filename}'
     title_pattern: '{num} {title}'
     custom_genres_fields:
     - '{genre}'

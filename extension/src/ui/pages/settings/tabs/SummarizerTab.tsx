@@ -166,6 +166,7 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
           folderPattern={formConfig.summarizer.path.output_folder_pattern}
           basenamePattern={formConfig.summarizer.path.basename_pattern}
           baseDirectory={formConfig.scanner.input_directory}
+          nfoBasenamePattern={formConfig.summarizer.nfo?.basename_pattern}
         />
       </div>
 

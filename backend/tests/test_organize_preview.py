@@ -232,3 +232,61 @@ def test_preview_organize_corrupt_cover_graceful_fallback(client):
 
     assert data["status"] == "ok"
     assert data["cropped_poster_base64"] is None
+
+
+def test_nfo_naming_with_filename_matching_video(client, monkeypatch):
+    """测试 NFO 命名与视频主文件完全同名（包括默认 {filename} 及自定义复杂视频名）。"""
+    cfg = get_config()
+    # 1. 默认设置：视频为 IPX-177.mp4，NFO 必须为 IPX-177.nfo
+    monkeypatch.setattr(cfg.summarizer.nfo, "basename_pattern", "{filename}")
+    monkeypatch.setattr(cfg.summarizer.path, "basename_pattern", "{num}")
+
+    req_body = {
+        "metadata": {
+            "dvdid": "IPX-177",
+            "title": "测试影片",
+        },
+        "test_filename": "sample.mkv",
+    }
+    resp = client.post("/api/organize/preview", json=req_body)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["video_filename"] == "IPX-177.mkv"
+    assert data["nfo_filename"] == "IPX-177.nfo"
+
+    # 2. 自定义复杂视频名模板：如 [{num}] {title}
+    monkeypatch.setattr(cfg.summarizer.path, "basename_pattern", "[{num}] {title}")
+    resp2 = client.post("/api/organize/preview", json=req_body)
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2["video_filename"] == "[IPX-177] 测试影片.mkv"
+    assert data2["nfo_filename"] == "[IPX-177] 测试影片.nfo"
+
+
+def test_nfo_naming_backward_compatible_movie_and_fallback(client, monkeypatch):
+    """测试兼容旧配置 'movie' 生成 movie.nfo，以及空字符串配置优雅回退为同名。"""
+    cfg = get_config()
+
+    # 1. 兼容旧配置 movie -> movie.nfo
+    monkeypatch.setattr(cfg.summarizer.nfo, "basename_pattern", "movie")
+    monkeypatch.setattr(cfg.summarizer.path, "basename_pattern", "{num}")
+
+    req_body = {
+        "metadata": {
+            "dvdid": "SSIS-001",
+            "title": "经典旧配置测试",
+        },
+    }
+    resp = client.post("/api/organize/preview", json=req_body)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["video_filename"] == "SSIS-001.mp4"
+    assert data["nfo_filename"] == "movie.nfo"
+
+    # 2. 空白字符串回退 -> 自动回退为与视频同名
+    monkeypatch.setattr(cfg.summarizer.nfo, "basename_pattern", "  ")
+    resp2 = client.post("/api/organize/preview", json=req_body)
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2["nfo_filename"] == "SSIS-001.nfo"
+

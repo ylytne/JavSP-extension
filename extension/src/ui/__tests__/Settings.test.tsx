@@ -326,10 +326,20 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
       root.render(<NfoTab formConfig={currentConfig} updateForm={updateForm} />);
     });
 
+    expect(container.textContent).toContain("NFO 文件命名规则");
     expect(container.textContent).toContain("NFO 影片标题模板");
     expect(container.textContent).toContain("剧情简介 (Plot) 清理设置");
     expect(container.textContent).toContain("清理简介开头的番号前缀");
     expect(container.textContent).toContain(" - airav.io");
+
+    // 点击切换为 movie.nfo 按钮
+    const movieBtn = container.querySelector("button[title='切换为 Kodi 经典 movie.nfo']") as HTMLButtonElement;
+    expect(movieBtn).not.toBeNull();
+    await act(async () => {
+      movieBtn.click();
+    });
+    expect(updateForm).toHaveBeenCalled();
+    expect(currentConfig.summarizer.nfo.basename_pattern).toBe("movie");
 
     // 找到删除按钮并点击
     const deleteBtn = container.querySelector("button[title='删除该规则']") as HTMLButtonElement;
