@@ -77,6 +77,16 @@ export class JavDBCrawler extends BaseCrawler {
     const metaText = box.querySelector("div.meta")?.textContent?.trim() || "";
     const dateMatch = metaText.match(/\d{4}-\d{2}-\d{2}/);
 
+    const actressList: string[] = [];
+    const actorLinks = box.querySelectorAll("a.actor-female, .actors a, .meta a");
+    actorLinks.forEach((a) => {
+      if (a.classList.contains("actor-male")) return;
+      const text = a.textContent?.trim();
+      if (text && !actressList.includes(text) && !/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        actressList.push(text);
+      }
+    });
+
     return this.cleanTitle({
       dvdid,
       url,
@@ -88,7 +98,7 @@ export class JavDBCrawler extends BaseCrawler {
       publish_date: dateMatch ? dateMatch[0] : undefined,
       genre: [],
       genre_id: [],
-      actress: [],
+      actress: actressList,
       preview_pics: [],
     });
   }
@@ -192,7 +202,7 @@ export class JavDBCrawler extends BaseCrawler {
     doc.querySelectorAll("strong").forEach((st) => {
       const text = st.textContent?.trim() || "";
       if (/(?:演員|演员|actors?|actress(?:es)?)[：:]/i.test(text)) {
-        const actorSpan = st.parentElement?.querySelector("span");
+        const actorSpan = st.parentElement?.querySelector("span") || st.parentElement;
         if (actorSpan) {
           // 1. 优先提取现代 JavDB 标记的女性演员 a.actor-female
           const femaleLinks = Array.from(actorSpan.querySelectorAll("a.actor-female"));

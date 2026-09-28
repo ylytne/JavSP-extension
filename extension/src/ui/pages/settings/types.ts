@@ -1,3 +1,5 @@
+import { DimensionRoutingConfig } from "../../../crawlers/dimensionSlots";
+
 export interface ScannerConfig {
   ignored_id_pattern: string[];
   input_directory: string | null;
@@ -123,6 +125,7 @@ export interface FullAppConfig {
   network: NetworkConfig;
   crawler: CrawlerConfig;
   crawlers: string[];
+  dimension_routing?: DimensionRoutingConfig;
   summarizer: SummarizerConfig;
   translator: TranslatorConfig;
   server: ServerProcessConfig;

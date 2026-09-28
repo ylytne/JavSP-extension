@@ -5,6 +5,7 @@ import { wsService } from "../../../../services/backend-ws";
 import { serverConfig } from "../../../../services/serverConfig";
 import { LogEntry } from "../../../components/LogDrawer";
 import { CrawlerRuntimeConfig } from "../types";
+import { DEFAULT_DIMENSION_ROUTING } from "../../../../crawlers/dimensionSlots";
 
 const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
   retry: 3,
@@ -19,6 +20,7 @@ const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
   includeTrailer: false,
   crawlers: ["javbus", "javdb", "airav"],
   useJavdbCover: "fallback",
+  dimensionRouting: DEFAULT_DIMENSION_ROUTING,
   burstProtectionEnabled: true,
   burstLimit: 10,
   burstJitter: 2,
@@ -81,6 +83,8 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
       includeTrailer: typeof nfoCfg.include_trailer === "boolean" ? nfoCfg.include_trailer : prev.includeTrailer,
       crawlers: Array.isArray(cfg.crawlers) && cfg.crawlers.length > 0 ? cfg.crawlers : prev.crawlers,
       useJavdbCover: (coverCfg.use_javdb_cover === "never" ? "never" : "fallback") as "fallback" | "never",
+      dimensionRouting:
+        cfg.dimension_routing ?? prev.dimensionRouting ?? DEFAULT_DIMENSION_ROUTING,
       burstProtectionEnabled:
         typeof crw.burst_protection_enabled === "boolean"
           ? crw.burst_protection_enabled

@@ -1,4 +1,5 @@
 import { LogEntry } from "../../components/LogDrawer";
+import { DimensionRoutingConfig } from "../../../crawlers/dimensionSlots";
 
 export interface CrawlerRuntimeConfig {
   retry: number;
@@ -13,6 +14,7 @@ export interface CrawlerRuntimeConfig {
   includeTrailer: boolean;
   crawlers: string[];
   useJavdbCover: "fallback" | "never";
+  dimensionRouting?: DimensionRoutingConfig;
   burstProtectionEnabled: boolean;
   burstLimit: number;
   burstJitter: number;

@@ -4,6 +4,12 @@
 
 import { MovieInfo } from "./types";
 import { isValidTitle, detectTextLanguage } from "./dvdid";
+import {
+  DimensionRoutingConfig,
+  SlotValidators,
+  resolveActiveRoute,
+  resolveSlot,
+} from "./dimensionSlots";
 
 /**
  * 寻找并移除标题尾部的女优名
@@ -102,16 +108,53 @@ export interface SummarizerOptions {
   uncensored?: boolean;
   useJavdbCover?: "fallback" | "never";
   cleanActressAlias?: boolean;
+  dimensionRouting?: Partial<DimensionRoutingConfig>; // 第一级：各插槽专属路由
+  enabledCrawlers?: string[]; // 已启用站点序列（同时充当动态 priorityOrder）
 }
 
-/**
- * 多源清洗与合并汇总器 (目标驱动流水线)
- */
+// 现代规范签名
 export function summarizeMovieResults(
   siteData: Record<string, Partial<MovieInfo>>,
-  priorityOrder: string[] = ["javbus", "javdb", "airav"],
-  flags: SummarizerOptions = {}
+  options?: SummarizerOptions
+): MovieInfo;
+
+// 历史兼容重载签名 (现有 31 个单元测试与已有调用零改动兼容)
+export function summarizeMovieResults(
+  siteData: Record<string, Partial<MovieInfo>>,
+  priorityOrder?: string[],
+  flags?: SummarizerOptions
+): MovieInfo;
+
+// 统一实现层：参数归一化与动态兜底序列推导
+export function summarizeMovieResults(
+  siteData: Record<string, Partial<MovieInfo>>,
+  priorityOrderOrOptions?: string[] | SummarizerOptions,
+  legacyFlags?: SummarizerOptions
 ): MovieInfo {
+  let flags: SummarizerOptions = {};
+  let enabledCrawlers: string[] = [];
+
+  if (Array.isArray(priorityOrderOrOptions)) {
+    // 兼容历史调用: summarizeMovieResults(siteData, ["javbus", "javdb"], flags)
+    enabledCrawlers = priorityOrderOrOptions;
+    flags = legacyFlags || {};
+  } else if (priorityOrderOrOptions && typeof priorityOrderOrOptions === "object") {
+    // 新标准调用: summarizeMovieResults(siteData, { dimensionRouting, enabledCrawlers, ... })
+    flags = priorityOrderOrOptions;
+    if (flags.enabledCrawlers && Array.isArray(flags.enabledCrawlers) && flags.enabledCrawlers.length > 0) {
+      enabledCrawlers = flags.enabledCrawlers;
+    }
+  }
+
+  // 极限自适应兜底：若外部未提供启用列表，自动以实际抓到数据的站点为基准序列，杜绝写死常量！
+  if (enabledCrawlers.length === 0) {
+    enabledCrawlers = Object.keys(siteData);
+  }
+
+  // 动态基准兜底顺位 priorityOrder（严格与 enabledCrawlers 同步）
+  const priorityOrder = enabledCrawlers;
+  const routingConfig = flags.dimensionRouting;
+
   const merged: Partial<MovieInfo> = {
     covers: [],
     big_covers: [],
@@ -121,9 +164,6 @@ export function summarizeMovieResults(
     preview_pics: [],
     magnet: [],
   };
-
-  const useJavdbCover = flags.useJavdbCover ?? "fallback";
-  const javdbData = siteData["javdb"];
 
   // -------------------------------------------------------------
   // 1. 标题与原名路由（语言感知与纯数字共识仲裁）
@@ -155,16 +195,14 @@ export function summarizeMovieResults(
     return isValidTitle(trimmed);
   };
 
-  // 候选池检索：优先提取自然中文标题（AirAV 等）
+  const chineseRoute = resolveActiveRoute("chinese", routingConfig, priorityOrder);
+  const metaRoute = resolveActiveRoute("meta", routingConfig, priorityOrder);
+
+  // 候选池检索：优先提取自然中文标题（AirAV 等，遵循 chineseRoute 顺位）
   let bestZhTitle: string | undefined;
   let bestZhTitleTranslated: boolean | undefined;
 
-  // 按照站点顺序（AirAV 优先，然后按照优先级列表）寻找中文标题
-  const zhSearchOrder = [
-    ...(siteData["airav"] ? ["airav"] : []),
-    ...priorityOrder.filter((s) => s !== "airav"),
-  ];
-  for (const site of zhSearchOrder) {
+  for (const site of chineseRoute) {
     const data = siteData[site];
     if (!data?.title) continue;
     if (isCandidateTitleValid(data.title) && detectTextLanguage(data.title) === "zh") {
@@ -174,14 +212,9 @@ export function summarizeMovieResults(
     }
   }
 
-  // 候选池检索：优先提取日文/英文原名（JavBus 优先，其次 JavDB 等）
+  // 候选池检索：优先提取日文/英文原名（遵循 metaRoute 顺位）
   let bestOrigTitle: string | undefined;
-  const origSearchOrder = [
-    ...(siteData["javbus"] ? ["javbus"] : []),
-    ...priorityOrder.filter((s) => s !== "javbus"),
-  ];
-
-  for (const site of origSearchOrder) {
+  for (const site of metaRoute) {
     const data = siteData[site];
     if (!data) continue;
     // 优先检查 ori_title
@@ -217,7 +250,7 @@ export function summarizeMovieResults(
       merged.ori_title = bestOrigTitle;
     }
   } else {
-    // 兜底：若均未命中语言规则，按 priorityOrder 选取第一个有效标题
+    // 极端边缘未知语言标题兜底：直接沿 priorityOrder 遍历首个满足基础校验的标题
     for (const site of priorityOrder) {
       const data = siteData[site];
       if (data?.title && isCandidateTitleValid(data.title)) {
@@ -229,81 +262,87 @@ export function summarizeMovieResults(
   }
 
   // -------------------------------------------------------------
-  // 2. 剧情简介（AirAV 中文优先）
+  // 2. 剧情简介（优先遵循 chineseRoute 顺位）
   // -------------------------------------------------------------
-  if (siteData["airav"]?.plot && siteData["airav"].plot.trim().length >= 2) {
-    merged.plot = siteData["airav"].plot;
-    if (siteData["airav"].plot_translated !== undefined) {
-      merged.plot_translated = siteData["airav"].plot_translated;
-    }
-  } else {
-    for (const site of priorityOrder) {
-      const data = siteData[site];
-      if (data?.plot && data.plot.trim().length >= 2) {
-        merged.plot = data.plot;
-        if (data.plot_translated !== undefined) {
-          merged.plot_translated = data.plot_translated;
-        }
-        break;
-      }
-    }
-  }
-
-  // -------------------------------------------------------------
-  // 3. 剧照预览图（单源整套独占：JavBus > JavDB > 其他）
-  // -------------------------------------------------------------
-  const previewSourceOrder = [
-    ...(siteData["javbus"] ? ["javbus"] : []),
-    ...(siteData["javdb"] ? ["javdb"] : []),
-    ...priorityOrder.filter((s) => s !== "javbus" && s !== "javdb"),
-  ];
-  for (const site of previewSourceOrder) {
-    const data = siteData[site];
-    if (data?.preview_pics && data.preview_pics.length > 0) {
-      merged.preview_pics = [...data.preview_pics];
+  for (const siteId of chineseRoute) {
+    const p = siteData[siteId]?.plot;
+    if (p && p.trim().length >= 2) {
+      merged.plot = p;
+      merged.plot_translated = siteData[siteId]?.plot_translated;
       break;
     }
   }
-
-  // -------------------------------------------------------------
-  // 4. 分类体系（JavDB 单源独占霸权）
-  // -------------------------------------------------------------
-  if (javdbData?.genre && javdbData.genre.length > 0) {
-    merged.genre = [...javdbData.genre];
-    merged.genre_id = [...(javdbData.genre_id || [])];
-  } else {
-    for (const site of priorityOrder) {
-      const data = siteData[site];
-      if (data?.genre && data.genre.length > 0) {
-        merged.genre = [...data.genre];
-        merged.genre_id = [...(data.genre_id || [])];
+  if (!merged.plot) {
+    for (const siteId of priorityOrder) {
+      const p = siteData[siteId]?.plot;
+      if (p && p.trim().length >= 2) {
+        merged.plot = p;
+        merged.plot_translated = siteData[siteId]?.plot_translated;
         break;
       }
     }
   }
 
   // -------------------------------------------------------------
-  // 5. 评分（JavDB 社区独占）
+  // 3. 剧照预览图（单源整套独占：遵循 previewsRoute 顺位）
   // -------------------------------------------------------------
-  if (javdbData?.score) {
-    merged.score = javdbData.score;
-  } else {
-    for (const site of priorityOrder) {
-      if (siteData[site]?.score) {
-        merged.score = siteData[site]!.score;
-        break;
+  const previewsRoute = resolveActiveRoute("previews", routingConfig, priorityOrder);
+  const { value: selectedPreviews } = resolveSlot(
+    siteData,
+    previewsRoute,
+    (d) => d.preview_pics,
+    SlotValidators.nonEmptyArray
+  );
+  if (selectedPreviews && selectedPreviews.length > 0) {
+    merged.preview_pics = [...selectedPreviews];
+  }
+
+  // -------------------------------------------------------------
+  // 4. 分类体系（原子提取与多源保底：遵循 genreRoute 顺位）
+  // -------------------------------------------------------------
+  const genreRoute = resolveActiveRoute("genre", routingConfig, priorityOrder);
+  const { value: selectedGenres, source: genreSource } = resolveSlot(
+    siteData,
+    genreRoute,
+    (d) => d.genre,
+    SlotValidators.nonEmptyArray
+  );
+  if (selectedGenres && genreSource) {
+    merged.genre = [...selectedGenres];
+    merged.genre_id = [...(siteData[genreSource]?.genre_id || [])];
+  }
+
+  // -------------------------------------------------------------
+  // 5. 出演女优（单源整套独占瀑布降级：遵循 actressRoute 顺位）
+  // -------------------------------------------------------------
+  const shouldCleanActress = flags.cleanActressAlias ?? true;
+  const actressRoute = resolveActiveRoute("actress", routingConfig, priorityOrder);
+  const { value: selectedActors } = resolveSlot(
+    siteData,
+    actressRoute,
+    (d) => d.actress,
+    SlotValidators.nonEmptyArray
+  );
+
+  let rawSelectedActors: string[] = [];
+  if (selectedActors && selectedActors.length > 0) {
+    rawSelectedActors = [...selectedActors];
+    const cleanActors: string[] = [];
+    for (const act of selectedActors) {
+      const processed = shouldCleanActress ? cleanActressName(act) : act.trim();
+      if (processed && !cleanActors.includes(processed)) {
+        cleanActors.push(processed);
       }
+    }
+    if (cleanActors.length > 0) {
+      merged.actress = cleanActors;
     }
   }
 
   // -------------------------------------------------------------
-  // 6. 其他基础字段依次继承（官方基石物料优先：JavBus > 其他辅助数据源）
+  // 6. 其他基础字段依次继承（发售基础元数据逐字段降级补全）
   // -------------------------------------------------------------
-  const baseMetaOrder = [
-    ...(siteData["javbus"] ? ["javbus"] : []),
-    ...priorityOrder.filter((s) => s !== "javbus"),
-  ];
-  for (const site of baseMetaOrder) {
+  for (const site of metaRoute) {
     const data = siteData[site];
     if (!data) continue;
 
@@ -316,13 +355,14 @@ export function summarizeMovieResults(
     if (!merged.producer && data.producer) merged.producer = data.producer;
     if (!merged.publisher && data.publisher) merged.publisher = data.publisher;
     if (!merged.serial && data.serial) merged.serial = data.serial;
+    if (!merged.score && data.score) merged.score = data.score;
     if (!merged.preview_video && data.preview_video) merged.preview_video = data.preview_video;
     if (merged.uncensored === undefined && data.uncensored !== undefined) {
       merged.uncensored = data.uncensored;
     }
 
-    // 磁链合并
-    if (data.magnet) {
+    // 磁链全源去重累加合并
+    if (data.magnet && Array.isArray(data.magnet)) {
       for (const m of data.magnet) {
         if (!merged.magnet!.includes(m)) merged.magnet!.push(m);
       }
@@ -330,36 +370,7 @@ export function summarizeMovieResults(
   }
 
   // -------------------------------------------------------------
-  // 6.1 女优名与头像（单源整套独占采纳：JavBus > JavDB > 其他站点按 priorityOrder）
-  // 严禁跨站点合并演员列表求并集，否则不同站点间的中日双语译名会导致同一演员重复添加
-  // -------------------------------------------------------------
-  const shouldCleanActress = flags.cleanActressAlias ?? true;
-  const actressSourceOrder = [
-    ...(siteData["javbus"]?.actress?.length ? ["javbus"] : []),
-    ...(siteData["javdb"]?.actress?.length ? ["javdb"] : []),
-    ...priorityOrder.filter((s) => s !== "javbus" && s !== "javdb"),
-  ];
-  let rawSelectedActors: string[] = [];
-  for (const site of actressSourceOrder) {
-    const data = siteData[site];
-    if (data?.actress && data.actress.length > 0) {
-      rawSelectedActors = [...data.actress];
-      const cleanActors: string[] = [];
-      for (const act of data.actress) {
-        const processed = shouldCleanActress ? cleanActressName(act) : act.trim();
-        if (processed && !cleanActors.includes(processed)) {
-          cleanActors.push(processed);
-        }
-      }
-      if (cleanActors.length > 0) {
-        merged.actress = cleanActors;
-        break;
-      }
-    }
-  }
-
-  // -------------------------------------------------------------
-  // 7. 封面图与大图梯队裁决 (JavBus基石 > AirAV增强 > 非JavDB > JavDB保底/禁用)
+  // 7. 封面图与大图梯队裁决
   // -------------------------------------------------------------
   const candidateCovers: string[] = [];
   const candidateBigCovers: string[] = [];
@@ -384,26 +395,35 @@ export function summarizeMovieResults(
     }
   };
 
-  // 严格执行目标驱动梯队：JavBus(官方高清展开图基石) > AirAV(无水印封面增强) > 其余非JavDB站点 > JavDB(水印图保底/禁用)
-  const coverSourceOrder = [
-    ...(siteData["javbus"] ? ["javbus"] : []),
-    ...(siteData["airav"] ? ["airav"] : []),
-    ...priorityOrder.filter((s) => s !== "javbus" && s !== "airav" && s !== "javdb"),
-  ];
-  for (const site of coverSourceOrder) {
-    addCoversFromData(siteData[site]);
-  }
+  const coverRoute = resolveActiveRoute("cover", routingConfig, priorityOrder);
+  const useJavdbCover = flags.useJavdbCover ?? "fallback";
 
-  // 处理 JavDB 封面
-  if (useJavdbCover !== "never" && javdbData) {
-    addCoversFromData(javdbData);
+  // 若配置显式指定 never，拥有最高一票否决权，强制从 coverRoute 中过滤掉 javdb
+  const effectiveCoverRoute =
+    useJavdbCover === "never"
+      ? coverRoute.filter((s) => s !== "javdb")
+      : coverRoute;
+
+  for (const site of effectiveCoverRoute) {
+    addCoversFromData(siteData[site]);
   }
 
   merged.covers = candidateCovers;
   merged.big_covers = candidateBigCovers;
-  merged.cover = candidateCovers.length > 0 ? candidateCovers[0] : "";
+  merged.cover =
+    candidateCovers.length > 0
+      ? candidateCovers[0]
+      : candidateBigCovers.length > 0
+      ? candidateBigCovers[0]
+      : "";
   merged.big_cover =
-    candidateBigCovers.length > 0 ? candidateBigCovers[0] : (merged.cover || "");
+    candidateBigCovers.length > 0
+      ? candidateBigCovers[0]
+      : (merged.cover || "");
+
+  if (merged.cover && !candidateCovers.includes(merged.cover)) {
+    candidateCovers.push(merged.cover);
+  }
 
   // -------------------------------------------------------------
   // 8. 必填字段校验

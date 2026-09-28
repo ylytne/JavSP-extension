@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   XCircle,
   ExternalLink,
+  Sliders,
 } from "lucide-react";
 import { FullAppConfig } from "../types";
 import { extractHostname } from "../../../../crawlers/tabBridge";
@@ -20,6 +21,11 @@ import {
   testSiteConnectivity,
   ConnectivityTestResult,
 } from "../../../../crawlers/base";
+import {
+  DimensionRoutingConfig,
+  DEFAULT_DIMENSION_ROUTING,
+  SLOT_ELIGIBLE_SITES,
+} from "../../../../crawlers/dimensionSlots";
 
 interface NetworkTabProps {
   formConfig: FullAppConfig;
@@ -59,6 +65,65 @@ const KNOWN_CRAWLERS: CrawlerMeta[] = [
     badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
     desc: "探测试探人工翻译繁体中文标题与详细中文剧情简介。",
     features: ["繁体中文标题", "中文剧情简介", "语言感知分流"],
+  },
+];
+
+const CRAWLER_NAMES: Record<string, string> = {
+  javbus: "JavBus",
+  javdb: "JavDB",
+  airav: "AirAV",
+};
+
+interface DimensionSlotMeta {
+  key: keyof DimensionRoutingConfig;
+  name: string;
+  fields: string;
+  desc: string;
+  tip: string;
+}
+
+const DIMENSION_SLOTS: DimensionSlotMeta[] = [
+  {
+    key: "cover",
+    name: "封面海报",
+    fields: "cover, big_cover",
+    desc: "追求官方高清、无水印展开大图。",
+    tip: "首个非空有效图片 URL。若配置了过滤 JavDB 水印封面，将尊重该安全策略。",
+  },
+  {
+    key: "previews",
+    name: "剧照样张",
+    fields: "preview_pics",
+    desc: "追求独占、成套高清官方剧照样张。",
+    tip: "单源整套独占采纳（AirAV 无剧照物料，不参与此插槽）。",
+  },
+  {
+    key: "chinese",
+    name: "中文译名与简介",
+    fields: "title(zh), plot(zh)",
+    desc: "追求自然人工翻译繁中标题与剧情简介。",
+    tip: "当前由 AirAV 提供自然人工繁中，未命中或缺失时保留原文走外部机翻引擎。",
+  },
+  {
+    key: "genre",
+    name: "分类标签",
+    fields: "genre, genre_id",
+    desc: "追求权威番号标签闭包与分类映射。",
+    tip: "分类文本与站点分类 ID 同源原子提取，绝不跨站混杂；后端支持传递闭包清洗。",
+  },
+  {
+    key: "actress",
+    name: "出演女优",
+    fields: "actress",
+    desc: "追求规范日文名、杜绝中日译名混杂。",
+    tip: "单源整套独占采纳。若前置站点未收录该影片或未收录女优，自动顺位向下穿透回退。",
+  },
+  {
+    key: "meta",
+    name: "基础发售物料",
+    fields: "日期/时长/导演/片商/发行商/系列/评分/磁链",
+    desc: "追求权威发售信息与物料完整度。",
+    tip: "逐字段降级遍历补全缺失项，评分顺位采纳首个有效值，磁链全源累加合并。",
   },
 ];
 
@@ -149,21 +214,78 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
 
   const enabledCrawlerIds = formConfig.crawlers || [];
 
+  const moveCrawlerOrder = (id: string, direction: -1 | 1, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    updateForm((cfg) => {
+      const current = [...(cfg.crawlers || [])];
+      const index = current.indexOf(id);
+      if (index === -1) return cfg;
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= current.length) return cfg;
+      const temp = current[index];
+      current[index] = current[targetIndex];
+      current[targetIndex] = temp;
+      cfg.crawlers = current;
+      return cfg;
+    });
+  };
+
   const toggleCrawler = (id: string) => {
     updateForm((cfg) => {
       const current = cfg.crawlers || [];
-      const nextSet = new Set(
-        current.includes(id) ? current.filter((c) => c !== id) : [...current, id]
-      );
-      // 保持与已知站点的标准定义顺序一致，彻底杜绝开关点击导致数组乱序污染
-      const standardOrder = KNOWN_CRAWLERS.map((c) => c.id);
-      const sorted = standardOrder.filter((c) => nextSet.has(c));
-      for (const item of nextSet) {
-        if (!sorted.includes(item)) sorted.push(item);
+      if (current.includes(id)) {
+        cfg.crawlers = current.filter((c) => c !== id);
+      } else {
+        cfg.crawlers = [...current, id];
       }
-      cfg.crawlers = sorted;
       return cfg;
     });
+  };
+
+  // 防崩空值保护 (Undefined Defense) 与白名单能力约束
+  const currentRouting: DimensionRoutingConfig =
+    formConfig.dimension_routing ?? DEFAULT_DIMENSION_ROUTING;
+
+  const getSlotActiveCandidates = (slot: keyof DimensionRoutingConfig): string[] => {
+    const eligible = SLOT_ELIGIBLE_SITES[slot] || [];
+    const rawOrder = currentRouting[slot]?.length
+      ? currentRouting[slot]
+      : DEFAULT_DIMENSION_ROUTING[slot] || [];
+    const result = rawOrder.filter((s) => eligible.includes(s));
+    for (const s of eligible) {
+      if (!result.includes(s)) {
+        result.push(s);
+      }
+    }
+    return result;
+  };
+
+  const handleMoveSlot = (
+    slot: keyof DimensionRoutingConfig,
+    index: number,
+    direction: -1 | 1
+  ) => {
+    const current = [...getSlotActiveCandidates(slot)];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= current.length) return;
+    const temp = current[index];
+    current[index] = current[targetIndex];
+    current[targetIndex] = temp;
+
+    updateForm((prev) => ({
+      ...prev,
+      dimension_routing: {
+        ...(prev.dimension_routing || DEFAULT_DIMENSION_ROUTING),
+        [slot]: current,
+      },
+    }));
+  };
+
+  const handleResetRouting = () => {
+    updateForm((prev) => ({
+      ...prev,
+      dimension_routing: { ...DEFAULT_DIMENSION_ROUTING },
+    }));
   };
 
   return (
@@ -236,8 +358,42 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
                   </div>
                 </div>
 
-                {/* Switch 开关 */}
-                <div className="shrink-0 pt-0.5">
+                {/* 顺位微调与 Switch 开关 */}
+                <div
+                  className="shrink-0 flex items-center gap-2 pt-0.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isEnabled && (
+                    <div className="flex items-center gap-1 bg-slate-100/90 px-1.5 py-0.5 rounded-lg border border-slate-200">
+                      <span className="text-[10px] font-semibold text-slate-500">
+                        #{enabledCrawlerIds.indexOf(meta.id) + 1}
+                      </span>
+                      <div className="flex flex-col">
+                        <button
+                          type="button"
+                          disabled={enabledCrawlerIds.indexOf(meta.id) === 0}
+                          onClick={(e) => moveCrawlerOrder(meta.id, -1, e)}
+                          title="上移全局兜底顺位"
+                          className="text-[9px] leading-none text-slate-500 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-500 p-0.5 cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            enabledCrawlerIds.indexOf(meta.id) ===
+                            enabledCrawlerIds.length - 1
+                          }
+                          onClick={(e) => moveCrawlerOrder(meta.id, 1, e)}
+                          title="下移全局兜底顺位"
+                          className="text-[9px] leading-none text-slate-500 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-500 p-0.5 cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <label
                     className="relative inline-flex items-center cursor-pointer pointer-events-none"
                     aria-label={`启用 ${meta.name}`}
@@ -264,6 +420,17 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
           </div>
         )}
 
+        {/* 数据源顺位与兜底基准说明 */}
+        <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-200/80 text-[11px] text-blue-800 space-y-1">
+          <div className="font-semibold text-blue-900 flex items-center gap-1.5">
+            <Info size={13} className="text-blue-600 shrink-0" />
+            <span>数据源顺位说明：</span>
+          </div>
+          <p className="text-blue-700 leading-relaxed pl-4">
+            此顺位作为未显式配置插槽、新加入站点或冷门长尾物料的<strong>全局兜底顺位（Fallback Baseline）</strong>。在绝大多数情况下，封面、女优、分类等维度的实际物料优先权将由下方各维度的专属插槽优先级独立决定并优先覆盖。
+          </p>
+        </div>
+
         {/* 目标驱动流水线机制说明 */}
         <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 space-y-1">
           <div className="font-semibold text-slate-700 flex items-center gap-1">
@@ -275,6 +442,130 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
             <li><strong>分阶段并发加速</strong>：JavBus 优先锁定基石物料后，JavDB 与 AirAV 自动通过并发调度异步请求，大幅缩短单部影片的抓取等待耗时。</li>
             <li><strong>灵活按需启闭</strong>：如担心特定站点风控严苛，可在此随时一键关闭该站点；关闭后系统会自动由其余可用数据源智能兜底补全。</li>
           </ul>
+        </div>
+      </div>
+
+      {/* 2. 各维度插槽优先级调序看板 (Dimension Slot Routing) */}
+      <div className="pt-2 border-t border-slate-100 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Sliders size={15} className="text-indigo-600 shrink-0" />
+            <label className="block text-xs font-bold text-slate-700">
+              各维度插槽优先级调序看板 (Dimension Slot Routing)
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-400 hidden sm:inline">
+              独立配置 6 大核心物料维度的专属回退顺位
+            </span>
+            <button
+              type="button"
+              onClick={handleResetRouting}
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-800 rounded-lg transition cursor-pointer"
+              title="一键将 6 大插槽恢复至系统默认推荐顺序"
+            >
+              <RotateCcw size={11} />
+              <span>恢复默认推荐</span>
+            </button>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          当某维度物料在首选站点未收录或数据为空时，系统将严格按照您配置的站点路线顺位向下穿透降级。若某站点在上方总开关中被关闭，在下方队列中会自动显示为已停用并在实际抓取中跳过。
+        </p>
+
+        {/* 6 大维度卡片化陈列 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {DIMENSION_SLOTS.map((slot) => {
+            const currentOrder = getSlotActiveCandidates(slot.key);
+            const isSingle = currentOrder.length <= 1;
+
+            return (
+              <div
+                key={slot.key}
+                data-testid={`dimension-slot-${slot.key}`}
+                className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs hover:border-slate-300 transition"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-xs text-slate-800">
+                        {slot.name}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        ({slot.key})
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      {slot.desc}
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 bg-slate-50 text-slate-500 rounded border border-slate-200 shrink-0">
+                    {slot.fields}
+                  </span>
+                </div>
+
+                {/* 站点顺位徽章流 */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  {currentOrder.map((siteId, idx) => {
+                    const isSiteActive = enabledCrawlerIds.includes(siteId);
+                    const isFirst = idx === 0;
+                    const isLast = idx === currentOrder.length - 1;
+                    const siteName = CRAWLER_NAMES[siteId] || siteId;
+
+                    return (
+                      <React.Fragment key={siteId}>
+                        <div
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-medium transition ${
+                            isSiteActive
+                              ? "bg-slate-50 border-slate-200 text-slate-700 shadow-2xs"
+                              : "bg-slate-100/60 border-dashed border-slate-300 text-slate-400 opacity-60"
+                          }`}
+                        >
+                          <span>{idx + 1}. {siteName}</span>
+                          {!isSiteActive && (
+                            <span className="text-[8px] px-1 py-0.2 bg-slate-200 text-slate-500 rounded">
+                              已停用
+                            </span>
+                          )}
+                          {!isSingle && (
+                            <div className="flex items-center gap-0.5 ml-0.5">
+                              <button
+                                type="button"
+                                disabled={isFirst}
+                                onClick={() => handleMoveSlot(slot.key, idx, -1)}
+                                title={`将 ${siteName} 顺位前移`}
+                                className="w-4 h-4 flex items-center justify-center text-[9px] text-slate-500 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-slate-500 rounded hover:bg-slate-200/60 cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isLast}
+                                onClick={() => handleMoveSlot(slot.key, idx, 1)}
+                                title={`将 ${siteName} 顺位后移`}
+                                className="w-4 h-4 flex items-center justify-center text-[9px] text-slate-500 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-slate-500 rounded hover:bg-slate-200/60 cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                ▼
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {idx < currentOrder.length - 1 && (
+                          <span className="text-slate-300 text-[10px]">➔</span>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+
+                {/* 业务提示 */}
+                <div className="text-[10px] text-slate-400 leading-normal pt-0.5">
+                  {slot.tip}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

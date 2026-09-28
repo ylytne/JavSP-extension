@@ -316,10 +316,12 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
   // 阶段 4: 多源目标驱动清洗汇总
   let summarized: MovieInfo;
   try {
-    summarized = summarizeMovieResults(siteResults, enabledCrawlers, {
+    summarized = summarizeMovieResults(siteResults, {
       hardSub: item.hard_sub,
       uncensored: item.uncensored,
       useJavdbCover: crawlerConfig.useJavdbCover,
+      dimensionRouting: crawlerConfig.dimensionRouting,
+      enabledCrawlers: enabledCrawlers,
     });
     addLog("step", `[${item.dvdid}] 数据多源清洗汇总完成: "${summarized.title}"`);
   } catch (err: any) {

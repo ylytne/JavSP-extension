@@ -254,12 +254,23 @@ class TranslatorConfig(BaseModel):
     fields: TranslateFieldConfig = Field(default_factory=TranslateFieldConfig)
 
 
+class DimensionRoutingConfig(BaseModel):
+    """各数据维度插槽的站点优先级路由配置。"""
+    cover: list[str] = Field(default_factory=lambda: ["javbus", "airav", "javdb"])
+    previews: list[str] = Field(default_factory=lambda: ["javbus", "javdb"])
+    chinese: list[str] = Field(default_factory=lambda: ["airav"])
+    genre: list[str] = Field(default_factory=lambda: ["javdb", "javbus", "airav"])
+    actress: list[str] = Field(default_factory=lambda: ["javbus", "javdb", "airav"])
+    meta: list[str] = Field(default_factory=lambda: ["javbus", "javdb", "airav"])
+
+
 class AppConfig(BaseModel):
     """全局应用配置根模型。"""
     scanner: ScannerConfig = Field(default_factory=ScannerConfig)
     network: NetworkConfig = Field(default_factory=NetworkConfig)
     crawler: CrawlerConfig = Field(default_factory=CrawlerConfig)
-    crawlers: list[str] = Field(default_factory=lambda: ["javbus", "javdb"])
+    crawlers: list[str] = Field(default_factory=lambda: ["javbus", "javdb", "airav"])
+    dimension_routing: DimensionRoutingConfig = Field(default_factory=DimensionRoutingConfig)
     summarizer: SummarizerConfig = Field(default_factory=SummarizerConfig)
     translator: TranslatorConfig = Field(default_factory=TranslatorConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)

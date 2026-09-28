@@ -350,4 +350,76 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
     expect(updateForm).toHaveBeenCalled();
     expect(currentConfig.summarizer.nfo.plot_clean_patterns).toEqual([]);
   });
+
+  it("NetworkTab 应能展示各维度插槽优先级看板并支持顺位调序与重置", async () => {
+    let currentConfig = JSON.parse(JSON.stringify(mockConfig));
+    const updateForm = vi.fn((updater) => {
+      currentConfig = updater(currentConfig);
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<NetworkTab formConfig={currentConfig} updateForm={updateForm} />);
+    });
+
+    // 检查看板标题与 6 大插槽卡片
+    expect(container.textContent).toContain("各维度插槽优先级调序看板");
+    expect(container.textContent).toContain("封面海报");
+    expect(container.textContent).toContain("剧照样张");
+    expect(container.textContent).toContain("中文译名与简介");
+    expect(container.textContent).toContain("分类标签");
+    expect(container.textContent).toContain("出演女优");
+    expect(container.textContent).toContain("基础发售物料");
+
+    // 检查女优插槽卡片
+    const actressSlot = container.querySelector("[data-testid='dimension-slot-actress']");
+    expect(actressSlot).not.toBeNull();
+    expect(actressSlot?.textContent).toContain("JavBus");
+    expect(actressSlot?.textContent).toContain("JavDB");
+
+    // 点击女优插槽中 JavDB 的前移按钮 ▲
+    const moveUpBtn = actressSlot?.querySelector("button[title='将 JavDB 顺位前移']") as HTMLButtonElement;
+    expect(moveUpBtn).not.toBeNull();
+    await act(async () => {
+      moveUpBtn.click();
+    });
+    expect(updateForm).toHaveBeenCalled();
+    expect(currentConfig.dimension_routing?.actress[0]).toBe("javdb");
+
+    // 点击“恢复默认推荐”按钮
+    const resetBtn = container.querySelector("button[title='一键将 6 大插槽恢复至系统默认推荐顺序']") as HTMLButtonElement;
+    expect(resetBtn).not.toBeNull();
+    await act(async () => {
+      resetBtn.click();
+    });
+    expect(updateForm).toHaveBeenCalled();
+    expect(currentConfig.dimension_routing?.actress[0]).toBe("javbus");
+  });
+
+  it("NetworkTab 应支持微调已启用站点的全局兜底顺位", async () => {
+    let currentConfig = JSON.parse(JSON.stringify(mockConfig));
+    // 初始顺序: javbus, javdb
+    const updateForm = vi.fn((updater) => {
+      currentConfig = updater(currentConfig);
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<NetworkTab formConfig={currentConfig} updateForm={updateForm} />);
+    });
+
+    expect(container.textContent).toContain("数据源顺位说明");
+
+    // 找到 JavBus 卡片中的下移兜底顺位按钮
+    const javbusCard = container.querySelector("[data-testid='crawler-card-javbus']");
+    const moveDownBtn = javbusCard?.querySelector("button[title='下移全局兜底顺位']") as HTMLButtonElement;
+    expect(moveDownBtn).not.toBeNull();
+    await act(async () => {
+      moveDownBtn.click();
+    });
+    expect(updateForm).toHaveBeenCalled();
+    // JavBus 与 JavDB 调换顺位
+    expect(currentConfig.crawlers).toEqual(["javdb", "javbus"]);
+  });
 });
+

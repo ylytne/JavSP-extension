@@ -57,6 +57,28 @@ crawlers:
 - javbus
 - javdb
 - airav
+dimension_routing:
+  cover:
+  - javbus
+  - airav
+  - javdb
+  previews:
+  - javbus
+  - javdb
+  chinese:
+  - airav
+  genre:
+  - javdb
+  - javbus
+  - airav
+  actress:
+  - javbus
+  - javdb
+  - airav
+  meta:
+  - javbus
+  - javdb
+  - airav
 summarizer:
   move_files: true
   path:

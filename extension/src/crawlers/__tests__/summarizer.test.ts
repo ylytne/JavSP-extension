@@ -473,3 +473,279 @@ describe("summarizeMovieResults", () => {
     expect(summarized.actress).toEqual(["相沢みなみ"]);
   });
 });
+
+describe("Phase 2 维度插槽路由与回退仲裁引擎测试", () => {
+  it("仅 JavDB 有女优时应成功向下穿透并采纳 JavDB 演员 (痛点场景彻底修复)", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "相思相愛の温泉旅行",
+        actress: [],
+        cover: "https://javbus.com/c.jpg",
+      },
+      javdb: {
+        dvdid: "IPX-177",
+        title: "相思相愛 温泉旅行",
+        actress: ["小宵こなん"],
+        cover: "https://javdb.com/c.jpg",
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, ["javbus", "javdb"]);
+    expect(summarized.actress).toEqual(["小宵こなん"]);
+  });
+
+  it("首选 JavBus 正常有女优时应保持首位独占且中日文不混合", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "相思相愛の温泉旅行",
+        actress: ["相沢みなみ"],
+        cover: "https://javbus.com/c.jpg",
+      },
+      javdb: {
+        dvdid: "IPX-177",
+        title: "相思相愛 温泉旅行",
+        actress: ["相澤南"],
+        cover: "https://javdb.com/c.jpg",
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, ["javbus", "javdb"]);
+    expect(summarized.actress).toEqual(["相沢みなみ"]);
+  });
+
+  it("用户自定义女优插槽优先级时应严格按用户偏好顺位优先采纳", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "相思相愛の温泉旅行",
+        actress: ["相沢みなみ"],
+        cover: "https://javbus.com/c.jpg",
+      },
+      javdb: {
+        dvdid: "IPX-177",
+        title: "相思相愛 温泉旅行",
+        actress: ["小宵こなん"],
+        cover: "https://javdb.com/c.jpg",
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, {
+      dimensionRouting: { actress: ["javdb", "javbus"] },
+      enabledCrawlers: ["javbus", "javdb"],
+    });
+    expect(summarized.actress).toEqual(["小宵こなん"]);
+  });
+
+  it("JavDB 与 JavBus 均无分类时 AirAV 分类应成功作为第 3 顺位保底穿透", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "温泉旅行",
+        cover: "https://javbus.com/c.jpg",
+        genre: [],
+      },
+      airav: {
+        dvdid: "IPX-177",
+        title: "溫泉旅行",
+        cover: "https://airav.io/c.jpg",
+        genre: ["巨乳", "溫泉"],
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, ["javbus", "airav"]);
+    expect(summarized.genre).toEqual(["巨乳", "溫泉"]);
+  });
+
+  it("分类文本与分类 ID 必须来自同一胜出站点原子提取，严禁跨站混杂", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javdb: {
+        dvdid: "IPX-177",
+        title: "影片",
+        cover: "https://javdb.com/c.jpg",
+        genre: ["单体作品"],
+        genre_id: ["tags?c1=1"],
+      },
+      javbus: {
+        dvdid: "IPX-177",
+        title: "影片",
+        cover: "https://javbus.com/c.jpg",
+        genre: ["温泉", "无码"],
+        genre_id: ["v", "uncensored-x"],
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, ["javdb", "javbus"]);
+    expect(summarized.genre).toEqual(["单体作品"]);
+    expect(summarized.genre_id).toEqual(["tags?c1=1"]);
+  });
+
+  it("封面 useJavdbCover: never 拥有最高一票否决权，强制过滤 JavDB 并采纳备选源", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javdb: {
+        dvdid: "IPX-177",
+        title: "影片",
+        cover: "https://javdb.com/watermark.jpg",
+        big_cover: "https://javdb.com/watermark.jpg",
+      },
+      javbus: {
+        dvdid: "IPX-177",
+        title: "影片",
+        cover: "https://javbus.com/clean.jpg",
+        big_cover: "https://javbus.com/clean.jpg",
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, {
+      dimensionRouting: { cover: ["javdb", "javbus"] },
+      useJavdbCover: "never",
+      enabledCrawlers: ["javdb", "javbus"],
+    });
+    expect(summarized.cover).toBe("https://javbus.com/clean.jpg");
+    expect(summarized.covers).toEqual(["https://javbus.com/clean.jpg"]);
+  });
+
+  it("全站点均无女优或女优为空数组时应优雅降级为空数组且不崩溃", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "素人作品",
+        cover: "https://javbus.com/c.jpg",
+        actress: [],
+      },
+      javdb: {
+        dvdid: "IPX-177",
+        title: "素人作品",
+        cover: "https://javdb.com/c.jpg",
+        actress: ["   "],
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, ["javbus", "javdb"]);
+    expect(summarized.actress).toEqual([]);
+  });
+
+  it("仅启用未来新站点时应自适应融入各插槽首位，彻底解耦硬编码 3 站死锁", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      dmm: {
+        dvdid: "IPX-177",
+        title: "DMM 官方大作",
+        cover: "https://dmm.co.jp/cover.jpg",
+        actress: ["小宵こなん"],
+        genre: ["ハイビジョン"],
+        preview_pics: ["https://dmm.co.jp/p1.jpg"],
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, {
+      enabledCrawlers: ["dmm"],
+    });
+    expect(summarized.title).toBe("DMM 官方大作");
+    expect(summarized.cover).toBe("https://dmm.co.jp/cover.jpg");
+    expect(summarized.actress).toEqual(["小宵こなん"]);
+    expect(summarized.genre).toEqual(["ハイビジョン"]);
+    expect(summarized.preview_pics).toEqual(["https://dmm.co.jp/p1.jpg"]);
+  });
+
+  it("使用新标准 options 参数对象调用应正常工作且与插槽偏好完全匹配", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "标题",
+        cover: "https://javbus.com/c.jpg",
+        actress: ["女优A"],
+      },
+      airav: {
+        dvdid: "IPX-177",
+        title: "中文標題",
+        cover: "https://airav.io/c.jpg",
+        actress: ["女优B"],
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, {
+      dimensionRouting: {
+        actress: ["airav", "javbus"],
+      },
+      enabledCrawlers: ["javbus", "airav"],
+    });
+    expect(summarized.actress).toEqual(["女优B"]);
+    expect(summarized.title).toBe("中文標題");
+  });
+
+  it("使用历史多参数重载签名调用应保持 100% 向后兼容", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "标题",
+        cover: "https://javbus.com/c.jpg",
+        actress: ["相沢みなみ"],
+      },
+      airav: {
+        dvdid: "IPX-177",
+        title: "中文標題",
+        cover: "https://airav.io/c.jpg",
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, ["airav", "javbus"], {
+      hardSub: true,
+    });
+    expect(summarized.title).toBe("中文標題");
+    expect(summarized.actress).toEqual(["相沢みなみ"]);
+    expect(summarized.genre).toContain("内嵌字幕");
+  });
+
+  it("插槽中声明了某站点但在 enabledCrawlers 中被停用时应安全动态过滤并顺位向下回退", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "标题",
+        cover: "https://javbus.com/c.jpg",
+        actress: ["相沢みなみ"],
+      },
+      airav: {
+        dvdid: "IPX-177",
+        title: "中文標題",
+        cover: "https://airav.io/c.jpg",
+        actress: ["相澤南"],
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, {
+      dimensionRouting: {
+        actress: ["javbus", "airav"],
+      },
+      // 用户在设置中关闭了 javbus，仅启用了 airav
+      enabledCrawlers: ["airav"],
+    });
+    // JavBus 被过滤，回退采纳 AirAV 演员
+    expect(summarized.actress).toEqual(["相澤南"]);
+  });
+
+  it("仅包含 big_cover 而无 cover 字段时应平滑保底提取为 cover 且不抛出必填项缺失异常", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "大作标题",
+        big_cover: "https://javbus.com/big_only.jpg",
+        actress: ["相沢みなみ"],
+      },
+    };
+    const summarized = summarizeMovieResults(siteData, {
+      enabledCrawlers: ["javbus"],
+    });
+    expect(summarized.cover).toBe("https://javbus.com/big_only.jpg");
+    expect(summarized.big_cover).toBe("https://javbus.com/big_only.jpg");
+    expect(summarized.covers).toContain("https://javbus.com/big_only.jpg");
+  });
+
+  it("未启用 airav 时，全汉字日文片名不应误入 chineseRoute 导致原名丢失", () => {
+    const siteData: Record<string, Partial<MovieInfo>> = {
+      javbus: {
+        dvdid: "IPX-177",
+        title: "密着交尾 完全版",
+        cover: "https://javbus.com/c.jpg",
+        actress: ["相沢みなみ"],
+      },
+    };
+    // 仅开启 javbus，未开启 airav
+    const summarized = summarizeMovieResults(siteData, {
+      enabledCrawlers: ["javbus"],
+    });
+    // title 正常保底提取
+    expect(summarized.title).toBe("密着交尾 完全版");
+    // 未误标为中文已翻译
+    expect(summarized.title_translated).toBeUndefined();
+  });
+});

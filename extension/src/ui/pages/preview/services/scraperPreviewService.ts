@@ -205,10 +205,12 @@ export async function executeScrapePreview(
 
   // 4. 多源数据合并与清洗
   addLog("step", `[${dvdid}] 正在执行目标驱动多源清洗与优先级仲裁...`);
-  const summarized = summarizeMovieResults(siteData, enabledCrawlers, {
+  const summarized = summarizeMovieResults(siteData, {
     hardSub: options.hardSub,
     uncensored: options.uncensored,
     useJavdbCover: crawlerConfig.useJavdbCover,
+    dimensionRouting: crawlerConfig.dimensionRouting,
+    enabledCrawlers: enabledCrawlers,
   });
 
   if (signal?.aborted) {

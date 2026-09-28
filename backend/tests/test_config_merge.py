@@ -244,3 +244,37 @@ def test_network_proxy_free_defaults_and_override(tmp_path: Path):
     assert loaded.network.proxy_free["javbus"] == "https://seedmm.help"
 
 
+def test_dimension_routing_defaults_and_override(tmp_path: Path):
+    """测试插槽维度路由配置的默认值与用户覆盖合并。"""
+    # 1. 验证默认配置中 dimension_routing 的各字段默认值
+    default_cfg = get_default_config()
+    assert default_cfg.dimension_routing.cover == ["javbus", "airav", "javdb"]
+    assert default_cfg.dimension_routing.previews == ["javbus", "javdb"]
+    assert default_cfg.dimension_routing.chinese == ["airav"]
+    assert default_cfg.dimension_routing.genre == ["javdb", "javbus", "airav"]
+    assert default_cfg.dimension_routing.actress == ["javbus", "javdb", "airav"]
+    assert default_cfg.dimension_routing.meta == ["javbus", "javdb", "airav"]
+    assert default_cfg.crawlers == ["javbus", "javdb", "airav"]
+
+    # 2. 自定义覆盖测试
+    custom_yaml = tmp_path / "config.yml"
+    custom_yaml.write_text(
+        yaml.dump({
+            "dimension_routing": {
+                "actress": ["javdb", "javbus"],
+                "cover": ["airav", "javbus"],
+            }
+        }),
+        encoding="utf-8",
+    )
+    loaded = load_config(config_path=custom_yaml)
+    # 覆盖的字段
+    assert loaded.dimension_routing.actress == ["javdb", "javbus"]
+    assert loaded.dimension_routing.cover == ["airav", "javbus"]
+    # 未覆盖的字段无缝继承默认值
+    assert loaded.dimension_routing.previews == ["javbus", "javdb"]
+    assert loaded.dimension_routing.chinese == ["airav"]
+    assert loaded.dimension_routing.genre == ["javdb", "javbus", "airav"]
+    assert loaded.dimension_routing.meta == ["javbus", "javdb", "airav"]
+
+
