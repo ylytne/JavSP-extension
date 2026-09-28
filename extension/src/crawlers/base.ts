@@ -240,32 +240,71 @@ export abstract class BaseCrawler implements ICrawler {
     sourceSite: string = "javbus",
     retryConfig?: RequestRetryConfig
   ): Promise<string> {
-    if (typeof chrome !== "undefined" && chrome.tabs) {
-      return await fetchImageViaTab(imageUrl, sourceSite, retryConfig?.timeoutMs ?? 15000);
-    }
+    const timeoutMs = retryConfig?.timeoutMs ?? 15000;
 
-    // 非扩展环境（Node.js / Vitest 单测）兜底使用原生 fetchWithRetry
-    const response = await fetchWithRetry(
-      imageUrl,
-      {
-        credentials: "include",
-        headers: {
-          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        },
-      },
-      retryConfig,
-      "Image"
-    );
-
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result);
+    // 1. 优先尝试直接在扩展上下文中发起原生 fetch（依托 Manifest host_permissions 规避 Web 标签页的 CORS 限制，
+    //    并配合 Service Worker DNR 自动注入的 Referer 防盗链头），具备毫秒级无损吞吐，且完美支持跨域第三方图床（如 DMM awsimgsrc）；
+    try {
+      let response: Response;
+      const headers = {
+        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       };
-      reader.onerror = () => reject(new Error(`读取图片数据失败 (${imageUrl})`));
-      reader.readAsDataURL(blob);
-    });
+
+      try {
+        response = await fetchWithRetry(
+          imageUrl,
+          {
+            credentials: "include",
+            headers,
+          },
+          { maxRetries: 1, baseDelayMs: 300, timeoutMs },
+          "Image"
+        );
+      } catch (err: any) {
+        if (err instanceof MovieNotFoundError) throw err;
+        if (err instanceof SiteBlockedError) throw err;
+        // 若因 CORS 限制抛错，降级为不带凭据尝试（在扩展 host_permissions 下完全豁免 CORS）
+        response = await fetchWithRetry(
+          imageUrl,
+          {
+            credentials: "omit",
+            headers,
+          },
+          { maxRetries: 1, baseDelayMs: 300, timeoutMs },
+          "Image"
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const res = reader.result as string;
+          if (res) resolve(res);
+          else reject(new Error("FileReader 返回空结果"));
+        };
+        reader.onerror = () => reject(new Error(`读取图片数据失败 (${imageUrl})`));
+        reader.readAsDataURL(blob);
+      });
+    } catch (err: any) {
+      if (err instanceof MovieNotFoundError) {
+        throw err;
+      }
+
+      // 2. 若直接 fetch 遭遇 403 / 503 等反爬阻断，且处于 Chrome 扩展环境中，则降级走 TabBridge 常驻标签页同源通道
+      if (typeof chrome !== "undefined" && chrome.tabs) {
+        try {
+          return await fetchImageViaTab(imageUrl, sourceSite, timeoutMs);
+        } catch (tabErr) {
+          throw tabErr;
+        }
+      }
+
+      throw err;
+    }
   }
 }

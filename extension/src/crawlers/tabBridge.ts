@@ -569,10 +569,18 @@ export async function fetchImageViaTab(
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout);
         try {
-          const res = await fetch(imgUrl, {
-            credentials: "include",
-            signal: controller.signal,
-          });
+          let res: Response;
+          try {
+            res = await fetch(imgUrl, {
+              credentials: "include",
+              signal: controller.signal,
+            });
+          } catch {
+            res = await fetch(imgUrl, {
+              credentials: "omit",
+              signal: controller.signal,
+            });
+          }
           if (res.status === 404) {
             throw new Error("NOT_FOUND_404");
           }
