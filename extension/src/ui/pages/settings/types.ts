@@ -18,7 +18,6 @@ export interface NetworkConfig {
 export interface CrawlerConfig {
   sleep_after_scraping: number;
   sleep_jitter: number;
-  tab_bridge_hosts?: string[];
   burst_protection_enabled?: boolean;
   burst_limit?: number;
   burst_jitter?: number;
@@ -83,6 +82,7 @@ export interface SummarizerExtraFanartsConfig {
   timeout: number;
   max_count: number;
   uniform_sampling: boolean;
+  concurrency?: number;
 }
 
 export interface SummarizerSubtitleConfig {

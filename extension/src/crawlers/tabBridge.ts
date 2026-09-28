@@ -1,19 +1,48 @@
 /**
- * Chrome 扩展标签页同源桥接与过盾通道 (Tab Bridge)
+ * 全站点 TabBridge-First 架构与常驻标签页生命周期管理器
  *
  * 核心原理：
- * 针对开启了 Cloudflare Super Bot Fight Mode 等严格跨域 WAF 拦截的站点（例如 AirAV、JavDB 等），
- * 跨域 fetch（Sec-Fetch-Site: cross-site）会被直接 403 阻断。
+ * 浏览器沙盒中发起的跨域 fetch 会被强制注入 Origin: chrome-extension://<id>
+ * 和 Sec-Fetch-Site: cross-site 标记，目标网站（JavBus, JavDB, AirAV 等）CDN 会直接阻断。
  *
- * 本模块利用 Chrome 扩展特权提供两大终极过盾通道：
- * 1. 优先探测当前浏览器中是否已打开目标站点的标签页。若已打开，利用 chrome.scripting
- *    在目标页面上下文中执行【同源请求 (same-origin)】，完全免受跨域拦截，耗时仅数十毫秒且无感。
- * 2. 若未打开，在后台静默创建一个未激活标签页 (active: false)，以真实浏览器页面导航形式
- *    (Sec-Fetch-Dest: document) 加载目标站点，提取所需数据后安全销毁。
+ * 本模块作为默认传输层，在 UI 会话单例（ResidentTabManager）中管理各站点的常驻标签页：
+ * 1. 同源执行：直接在目标站点/生效镜像站的 Tab 上下文内同源执行 fetch 与图片读取，天然具备合法 Referer 与 Cookie；
+ * 2. 来源上下文透传 (Source Attribution)：下游图片下载认站不认图床 CDN 域名；
+ * 3. 内容级就绪探测：识别多语言 Cloudflare 5 秒盾与 Turnstile 验证码容器，引导用户过盾；
+ * 4. 导航漂移与休眠防护：比对 Tab 当前 URL 并过滤 discarded 标签页。
  */
 
-import { SiteBlockedError, TimeoutError } from "./base";
-import { serverConfig } from "../services/serverConfig";
+import { SiteBlockedError, TimeoutError, MovieNotFoundError } from "./base";
+
+export interface SiteReadinessItem {
+  id: string;
+  name: string;
+  url: string;
+  reason: "missing" | "cf_challenge" | "discarded";
+}
+
+export interface SiteReadinessResult {
+  ready: boolean;
+  missingOrBlockedSites: SiteReadinessItem[];
+}
+
+export interface TargetSiteConfig {
+  id: string;
+  baseUrl: string;
+  name?: string;
+}
+
+const DEFAULT_BASE_URLS: Record<string, string> = {
+  javbus: "https://www.javbus.com",
+  javdb: "https://javdb.com",
+  airav: "https://airav.io",
+};
+
+const DEFAULT_SITE_NAMES: Record<string, string> = {
+  javbus: "JavBus",
+  javdb: "JavDB",
+  airav: "AirAV",
+};
 
 /**
  * 标准化提取 hostname（支持纯域名或完整 URL）
@@ -30,325 +59,590 @@ export function extractHostname(urlOrHost: string): string {
   return raw.split("/")[0].split(":")[0].trim();
 }
 
-// 内存路由表，出厂默认包含已知必须过盾的站点
-const tabBridgeHosts = new Set<string>(["airav.io"]);
+/**
+ * 校验标签页 URL 是否与目标站点基准地址/域名匹配（支持根域模糊兼容）
+ */
+export function matchDomain(tabUrl: string | undefined, targetBaseUrlOrHost: string): boolean {
+  if (!tabUrl) return false;
+  try {
+    const tabHost = new URL(tabUrl).hostname.toLowerCase().replace(/^www\./, "");
+    const targetHost = extractHostname(targetBaseUrlOrHost).replace(/^www\./, "");
+    if (!tabHost || !targetHost) return false;
+    return tabHost === targetHost || tabHost.endsWith("." + targetHost) || targetHost.endsWith("." + tabHost);
+  } catch {
+    return false;
+  }
+}
 
 /**
- * 批量初始化/同步 TabBridge 站点集合（通常在拉取后端配置后调用）
+ * 等待指定标签页完成加载 (status === "complete")
  */
-export function initTabBridgeHosts(hosts: string[]): void {
-  tabBridgeHosts.clear();
-  tabBridgeHosts.add("airav.io");
-  for (const h of hosts) {
-    const normalized = extractHostname(h);
-    if (normalized) {
-      tabBridgeHosts.add(normalized);
+export async function waitForTabComplete(tabId: number, timeoutMs = 8000): Promise<boolean> {
+  if (typeof chrome === "undefined" || !chrome.tabs) return false;
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.status === "complete") return true;
+  } catch {
+    return false;
+  }
+
+  return new Promise<boolean>((resolve) => {
+    let timer: any;
+    const listener = (tid: number, change: chrome.tabs.TabChangeInfo) => {
+      if (tid === tabId && change.status === "complete") {
+        clearTimeout(timer);
+        if (chrome.tabs?.onUpdated) {
+          chrome.tabs.onUpdated.removeListener(listener);
+        }
+        resolve(true);
+      }
+    };
+    timer = setTimeout(() => {
+      if (chrome.tabs?.onUpdated) {
+        chrome.tabs.onUpdated.removeListener(listener);
+      }
+      resolve(false);
+    }, timeoutMs);
+
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+/**
+ * 常驻标签页生命周期管理器（单例，运行于 UI 前端进程中）
+ */
+export class ResidentTabManager {
+  private static instance: ResidentTabManager | null = null;
+  private tabs = new Map<string, number>(); // siteId -> tabId
+  private siteBaseUrls = new Map<string, string>(); // siteId -> effectiveBaseUrl
+
+  private constructor() {
+    this.registerListeners();
+  }
+
+  public static getInstance(): ResidentTabManager {
+    if (!ResidentTabManager.instance) {
+      ResidentTabManager.instance = new ResidentTabManager();
+    }
+    return ResidentTabManager.instance;
+  }
+
+  public static resetInstance(): void {
+    ResidentTabManager.instance = null;
+  }
+
+  private registerListeners(): void {
+    if (typeof chrome !== "undefined" && chrome.tabs?.onRemoved) {
+      chrome.tabs.onRemoved.addListener((closedTabId: number) => {
+        for (const [siteId, tabId] of this.tabs.entries()) {
+          if (tabId === closedTabId) {
+            this.tabs.delete(siteId);
+          }
+        }
+      });
     }
   }
-}
 
-/**
- * 获取当前所有已登记为 TabBridge 绕过的域名列表
- */
-export function getTabBridgeHosts(): string[] {
-  return Array.from(tabBridgeHosts);
-}
+  public setSiteBaseUrl(siteId: string, baseUrl: string): void {
+    if (!baseUrl) return;
+    const current = this.siteBaseUrls.get(siteId);
+    if (current && extractHostname(current) !== extractHostname(baseUrl)) {
+      // 域名发生变更，逐出原有 Tab 句柄缓存
+      this.tabs.delete(siteId);
+    }
+    this.siteBaseUrls.set(siteId, baseUrl);
+  }
 
-/**
- * 判断指定 URL 或域名是否属于必须走 TabBridge 的站点
- */
-export function isTabBridgeHost(urlOrHost: string): boolean {
-  const host = extractHostname(urlOrHost);
-  return tabBridgeHosts.has(host);
-}
+  public getSiteBaseUrl(siteId: string): string {
+    return this.siteBaseUrls.get(siteId) || DEFAULT_BASE_URLS[siteId] || "";
+  }
 
-/**
- * 异步上报域名至后端写入 config.yml
- */
-export async function reportBlockedHostToBackend(host: string): Promise<void> {
-  try {
-    const baseUrl = serverConfig.getHttpBaseUrl();
-    const authHeaders = serverConfig.getAuthHeaders();
-    await fetch(`${baseUrl}/api/config/tab-bridge-hosts`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-      },
-      body: JSON.stringify({ host }),
-    });
-  } catch (e) {
-    console.warn(`[TabBridge] 自动持久化域名 ${host} 到后端失败:`, e);
+  public getCachedTabId(siteId: string): number | undefined {
+    return this.tabs.get(siteId);
+  }
+
+  public evictTab(siteId: string): void {
+    this.tabs.delete(siteId);
+  }
+
+  /**
+   * 内容级探测标签页是否遇到 Cloudflare 盾或 Turnstile 人机验证
+   */
+  public async probeTabReadiness(tabId: number): Promise<boolean> {
+    if (typeof chrome === "undefined" || !chrome.scripting?.executeScript) {
+      return true;
+    }
+
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          try {
+            const title = (document.title || "").toLowerCase();
+            // 1. 标题特征检查（覆盖英文、中文环境拦截页）
+            const isShieldTitle =
+              title.includes("just a moment") ||
+              title.includes("attention required") ||
+              title.includes("cloudflare") ||
+              title.includes("请稍候") ||
+              title.includes("安全检查");
+
+            // 2. DOM 节点特征检查（覆盖 Turnstile、Challenge 表单与 CF iframe）
+            const isShieldDom = !!document.querySelector(
+              "#challenge-running, #cf-turnstile, #cf-challenge-running, " +
+                ".cf-turnstile-wrapper, iframe[src*='challenges.cloudflare.com'], " +
+                "iframe[src*='cloudflare.com']"
+            );
+
+            return !isShieldTitle && !isShieldDom;
+          } catch {
+            return false; // 出现注入异常保守判定为未就绪
+          }
+        },
+      });
+
+      return Boolean(results?.[0]?.result);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 检查所需站点的环境就绪状态（基于生效基准地址与内容级验盾）
+   */
+  public async checkSitesReadiness(
+    sites: TargetSiteConfig[]
+  ): Promise<SiteReadinessResult> {
+    if (typeof chrome === "undefined" || !chrome.tabs?.query) {
+      // 非扩展环境（如 Vitest 测试）默认直通
+      return { ready: true, missingOrBlockedSites: [] };
+    }
+
+    const missingOrBlockedSites: SiteReadinessItem[] = [];
+    const allTabs = await chrome.tabs.query({});
+
+    for (const site of sites) {
+      const siteId = site.id;
+      const effectiveBaseUrl =
+        site.baseUrl || this.getSiteBaseUrl(siteId) || DEFAULT_BASE_URLS[siteId];
+      this.setSiteBaseUrl(siteId, effectiveBaseUrl);
+
+      const siteName =
+        site.name ||
+        DEFAULT_SITE_NAMES[siteId] ||
+        siteId.toUpperCase();
+
+      const candidateTabs = allTabs.filter(
+        (t) => t.id && t.url && matchDomain(t.url, effectiveBaseUrl)
+      );
+
+      if (candidateTabs.length === 0) {
+        missingOrBlockedSites.push({
+          id: siteId,
+          name: siteName,
+          url: effectiveBaseUrl,
+          reason: "missing",
+        });
+        this.tabs.delete(siteId);
+        continue;
+      }
+
+      const nonDiscarded = candidateTabs.filter((t) => !t.discarded);
+      if (nonDiscarded.length === 0) {
+        missingOrBlockedSites.push({
+          id: siteId,
+          name: siteName,
+          url: effectiveBaseUrl,
+          reason: "discarded",
+        });
+        this.tabs.delete(siteId);
+        continue;
+      }
+
+      // 多标签页择优排序：status === "complete" 优先，其次按 lastAccessed 降序
+      nonDiscarded.sort((a, b) => {
+        if (a.status === "complete" && b.status !== "complete") return -1;
+        if (b.status === "complete" && a.status !== "complete") return 1;
+        return ((b as any).lastAccessed || 0) - ((a as any).lastAccessed || 0);
+      });
+
+      let foundReadyTab = false;
+      for (const candidateTab of nonDiscarded) {
+        const tabId = candidateTab.id!;
+        if (candidateTab.status !== "complete") {
+          await waitForTabComplete(tabId, 5000);
+        }
+
+        const isReady = await this.probeTabReadiness(tabId);
+        if (isReady) {
+          this.tabs.set(siteId, tabId);
+          foundReadyTab = true;
+          break;
+        }
+      }
+
+      if (!foundReadyTab) {
+        missingOrBlockedSites.push({
+          id: siteId,
+          name: siteName,
+          url: effectiveBaseUrl,
+          reason: "cf_challenge",
+        });
+        this.tabs.delete(siteId);
+      }
+    }
+
+    return {
+      ready: missingOrBlockedSites.length === 0,
+      missingOrBlockedSites,
+    };
+  }
+
+  /**
+   * 针对缺失或休眠的站点批量打开标签页
+   */
+  public async openMissingSiteTabs(
+    sites: Array<{ id: string; baseUrl?: string; url?: string; name?: string; reason?: string }>,
+    forceReopen = false
+  ): Promise<void> {
+    if (typeof chrome === "undefined" || !chrome.tabs?.create) return;
+
+    const allTabs = chrome.tabs.query ? await chrome.tabs.query({}) : [];
+
+    for (const site of sites) {
+      let rawUrl =
+        site.baseUrl || site.url || this.getSiteBaseUrl(site.id) || DEFAULT_BASE_URLS[site.id];
+      if (!rawUrl) continue;
+      if (!/^https?:\/\//i.test(rawUrl)) {
+        rawUrl = `https://${rawUrl}`;
+      }
+
+      // 1. 若标签页处于休眠/冻结状态，尝试重新加载唤醒
+      const existingDiscarded = allTabs.find(
+        (t) => t.id && t.discarded && t.url && matchDomain(t.url, rawUrl)
+      );
+      if (existingDiscarded?.id && chrome.tabs.reload) {
+        try {
+          await chrome.tabs.reload(existingDiscarded.id);
+          this.tabs.set(site.id, existingDiscarded.id);
+          continue;
+        } catch {
+          // reload 异常则降级重新创建
+        }
+      }
+
+      // 2. 若标签页已存在且未休眠（如 CF 质询中），非强制重新打开时避免产生重复标签页
+      if (!forceReopen && site.reason === "cf_challenge") {
+        const existingNonDiscarded = allTabs.find(
+          (t) => t.id && !t.discarded && t.url && matchDomain(t.url, rawUrl)
+        );
+        if (existingNonDiscarded?.id) {
+          this.tabs.set(site.id, existingNonDiscarded.id);
+          continue;
+        }
+      }
+
+      // 3. 若用户显式点击重新打开且标签页已存在，优先刷新该标签页
+      if (forceReopen) {
+        const existingTab = allTabs.find(
+          (t) => t.id && t.url && matchDomain(t.url, rawUrl)
+        );
+        if (existingTab?.id && chrome.tabs.reload) {
+          try {
+            await chrome.tabs.reload(existingTab.id);
+            this.tabs.set(site.id, existingTab.id);
+            continue;
+          } catch {}
+        }
+      }
+
+      // 4. 标签页缺失或刷新失败，创建新后台标签页
+      try {
+        const createdTab = await chrome.tabs.create({ url: rawUrl, active: false });
+        if (createdTab.id) {
+          this.tabs.set(site.id, createdTab.id);
+        }
+      } catch (err) {
+        console.warn(`[TabBridge] 打开站点标签页失败 (${site.id}):`, err);
+      }
+    }
+  }
+
+  /**
+   * 获取站点可用的合法标签页 ID（内置防导航漂移防护与即时探测）
+   */
+  public async getValidTab(siteId: string, fallbackUrl?: string): Promise<number> {
+    if (typeof chrome === "undefined" || !chrome.tabs) {
+      throw new SiteBlockedError("TabBridge", "当前环境不支持 chrome.tabs 扩展 API");
+    }
+
+    let effectiveBaseUrl = this.siteBaseUrls.get(siteId);
+    if (!effectiveBaseUrl) {
+      if (fallbackUrl) {
+        try {
+          const fallbackOrigin = new URL(fallbackUrl).origin;
+          const defaultBase = DEFAULT_BASE_URLS[siteId];
+          // 若 fallbackUrl 域名与默认主站不一致，说明用户配置了 proxy_free 镜像
+          if (!defaultBase || !matchDomain(fallbackOrigin, defaultBase)) {
+            effectiveBaseUrl = fallbackOrigin;
+            this.setSiteBaseUrl(siteId, effectiveBaseUrl);
+          }
+        } catch {}
+      }
+      if (!effectiveBaseUrl) {
+        effectiveBaseUrl = DEFAULT_BASE_URLS[siteId] || "";
+      }
+    }
+
+    const cachedTabId = this.tabs.get(siteId);
+    if (cachedTabId !== undefined) {
+      try {
+        const tab = await chrome.tabs.get(cachedTabId);
+        // 防导航漂移比对与休眠检测
+        if (!tab.discarded && tab.url && matchDomain(tab.url, effectiveBaseUrl)) {
+          return cachedTabId;
+        }
+      } catch {
+        // Tab 已关闭或无效
+      }
+      this.tabs.delete(siteId);
+    }
+
+    // 从所有打开标签页中匹配有效 Tab
+    const allTabs = await chrome.tabs.query({});
+    const matching = allTabs.filter(
+      (t) => t.id && !t.discarded && t.url && matchDomain(t.url, effectiveBaseUrl)
+    );
+
+    if (matching.length > 0) {
+      matching.sort((a, b) => {
+        if (a.status === "complete" && b.status !== "complete") return -1;
+        if (b.status === "complete" && a.status !== "complete") return 1;
+        return ((b as any).lastAccessed || 0) - ((a as any).lastAccessed || 0);
+      });
+      const chosen = matching[0];
+      this.tabs.set(siteId, chosen.id!);
+      return chosen.id!;
+    }
+
+    // 若存在被休眠冻结的标签页，尝试唤醒重载
+    const discardedMatching = allTabs.filter(
+      (t) => t.id && t.discarded && t.url && matchDomain(t.url, effectiveBaseUrl)
+    );
+    if (discardedMatching.length > 0 && chrome.tabs.reload) {
+      const toReload = discardedMatching[0];
+      try {
+        await chrome.tabs.reload(toReload.id!);
+        await waitForTabComplete(toReload.id!, 8000);
+        this.tabs.set(siteId, toReload.id!);
+        return toReload.id!;
+      } catch {}
+    }
+
+    // 若无可用标签页，新建未激活标签页
+    let urlToOpen = effectiveBaseUrl;
+    if (!urlToOpen) {
+      urlToOpen = fallbackUrl || DEFAULT_BASE_URLS[siteId] || "";
+    }
+    if (!urlToOpen) {
+      throw new Error(`无法推导站点 ${siteId} 的有效入口 URL`);
+    }
+    if (!/^https?:\/\//i.test(urlToOpen)) {
+      urlToOpen = `https://${urlToOpen}`;
+    }
+
+    const newTab = await chrome.tabs.create({ url: urlToOpen, active: false });
+    if (!newTab.id) {
+      throw new Error(`无法为站点 ${siteId} 创建常驻标签页`);
+    }
+
+    await waitForTabComplete(newTab.id, 8000);
+    this.tabs.set(siteId, newTab.id);
+    return newTab.id;
   }
 }
 
 /**
- * 异步从后端 config.yml 中移除域名
- */
-export async function deleteBlockedHostFromBackend(host: string): Promise<void> {
-  try {
-    const baseUrl = serverConfig.getHttpBaseUrl();
-    const authHeaders = serverConfig.getAuthHeaders();
-    await fetch(`${baseUrl}/api/config/tab-bridge-hosts/${encodeURIComponent(host)}`, {
-      method: "DELETE",
-      headers: authHeaders,
-    });
-  } catch (e) {
-    console.warn(`[TabBridge] 从后端删除域名 ${host} 失败:`, e);
-  }
-}
-
-/**
- * 动态登记域名为 TabBridge 站点：
- * 1. 立即更新内存路由表，确保本轮批量抓取后续请求零延迟短路；
- * 2. 异步上报后端写入 config.yml 实现永久持久化。
- */
-export async function markHostAsTabBridge(urlOrHost: string): Promise<void> {
-  const host = extractHostname(urlOrHost);
-  if (!host) return;
-
-  if (!tabBridgeHosts.has(host)) {
-    tabBridgeHosts.add(host);
-    console.info(`[TabBridge] 域名 ${host} 已加入 Tab 桥接白名单，后续将免试探直接走标签页通道`);
-    await reportBlockedHostToBackend(host);
-  }
-}
-
-/**
- * 从 TabBridge 站点名单中移除域名，并同步后端持久化
- */
-export async function unmarkHostAsTabBridge(urlOrHost: string): Promise<void> {
-  const host = extractHostname(urlOrHost);
-  if (!host) return;
-
-  tabBridgeHosts.delete(host);
-  await deleteBlockedHostFromBackend(host);
-}
-
-/**
- * 通过真实浏览器标签页通道获取网页 DOM Document
+ * 通过常驻标签页获取目标网页 DOM Document
  */
 export async function fetchDocumentViaTab(
   url: string,
+  siteId: string,
   timeoutMs = 15000
 ): Promise<Document> {
   if (typeof chrome === "undefined" || !chrome.tabs) {
     throw new SiteBlockedError("TabBridge", "当前环境不支持 chrome.tabs 扩展 API");
   }
 
-  // 1. 优先尝试复用已有同源标签页进行同源 fetch（速度极快且完全静默无感）
-  try {
-    const parsedUrl = new URL(url);
-    const domainPattern = `*://${parsedUrl.hostname}/*`;
-    const tabs = await chrome.tabs.query({ url: domainPattern });
-    const completedTab = tabs.find((t) => t.id && t.status === "complete");
+  const tabManager = ResidentTabManager.getInstance();
+  const tabId = await tabManager.getValidTab(siteId, url);
 
-    if (completedTab && completedTab.id && chrome.scripting && chrome.scripting.executeScript) {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: completedTab.id },
-        func: async (targetUrl: string) => {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async (targetUrl: string, timeout: number) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        try {
           const res = await fetch(targetUrl, {
             credentials: "include",
+            signal: controller.signal,
             headers: {
               Accept:
                 "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+              "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
             },
           });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return await res.text();
-        },
-        args: [url],
-      });
-
-      const html = results?.[0]?.result;
-      if (html && typeof html === "string") {
-        return new DOMParser().parseFromString(html, "text/html");
-      }
-    }
-  } catch (err) {
-    console.warn("[TabBridge] 复用同源标签页抓取失败，降级到后台静默标签页导航:", err);
-  }
-
-  // 2. 若无可用标签页，在后台静默创建一个未激活标签页进行真实导航（Sec-Fetch-Dest: document）
-  return new Promise<Document>((resolve, reject) => {
-    let tabId: number | undefined;
-    let timer: any;
-
-    const cleanup = () => {
-      clearTimeout(timer);
-      if (typeof chrome !== "undefined" && chrome.tabs?.onUpdated) {
-        chrome.tabs.onUpdated.removeListener(onUpdatedListener);
-      }
-      if (tabId && typeof chrome !== "undefined" && chrome.tabs?.remove) {
-        chrome.tabs.remove(tabId).catch(() => {});
-      }
-    };
-
-    timer = setTimeout(() => {
-      cleanup();
-      reject(new TimeoutError("TabBridge", `页面加载超过 ${timeoutMs / 1000} 秒`));
-    }, timeoutMs);
-
-    const onUpdatedListener = async (
-      updatedTabId: number,
-      changeInfo: chrome.tabs.TabChangeInfo
-    ) => {
-      if (updatedTabId !== tabId || changeInfo.status !== "complete") return;
-
-      try {
-        if (chrome.scripting && chrome.scripting.executeScript) {
-          const results = await chrome.scripting.executeScript({
-            target: { tabId },
-            func: () => document.documentElement.outerHTML,
-          });
-          const html = results?.[0]?.result;
-          cleanup();
-          if (html && typeof html === "string") {
-            resolve(new DOMParser().parseFromString(html, "text/html"));
-          } else {
-            reject(new Error("未能从标签页中提取页面 HTML 内容"));
+          if (res.status === 403 || res.status === 503) {
+            throw new Error(`BLOCKED_${res.status}`);
           }
-        } else {
-          cleanup();
-          reject(new Error("缺少 chrome.scripting 权限"));
+          if (res.status === 404) {
+            throw new Error("NOT_FOUND_404");
+          }
+          if (!res.ok) {
+            throw new Error(`HTTP_${res.status}`);
+          }
+          return await res.text();
+        } finally {
+          clearTimeout(timer);
         }
-      } catch (err) {
-        cleanup();
-        reject(err);
+      },
+      args: [url, timeoutMs],
+    });
+
+    const html = results?.[0]?.result;
+    if (typeof html === "string") {
+      const lower = html.slice(0, 4096).toLowerCase();
+      if (
+        lower.includes("just a moment") ||
+        lower.includes("attention required") ||
+        lower.includes("#challenge-running") ||
+        lower.includes("cf-turnstile") ||
+        (lower.includes("cloudflare") && lower.includes("challenge"))
+      ) {
+        throw new SiteBlockedError(siteId, "页面内容检测到 Cloudflare 质询拦截");
       }
-    };
-
-    chrome.tabs.onUpdated.addListener(onUpdatedListener);
-
-    chrome.tabs
-      .create({ url, active: false })
-      .then((createdTab) => {
-        tabId = createdTab.id;
-      })
-      .catch((err) => {
-        cleanup();
-        reject(err);
-      });
-  });
+      return new DOMParser().parseFromString(html, "text/html");
+    }
+    throw new Error("未能从常驻标签页中提取页面 HTML 内容");
+  } catch (err: any) {
+    if (err instanceof SiteBlockedError) {
+      throw err;
+    }
+    const msg = err?.message || String(err);
+    if (msg.includes("BLOCKED_403") || msg.includes("BLOCKED_503")) {
+      throw new SiteBlockedError(siteId, `页面访问触发站点拦截 (${msg})`);
+    }
+    if (msg.includes("AbortError") || msg.includes("timeout")) {
+      throw new TimeoutError(siteId, `标签页加载超过 ${timeoutMs / 1000} 秒`);
+    }
+    if (msg.includes("NOT_FOUND_404")) {
+      throw new MovieNotFoundError(siteId, `页面未找到 (404)`);
+    }
+    // 若标签页意外关闭或失效，逐出缓存
+    tabManager.evictTab(siteId);
+    throw err;
+  }
 }
 
 /**
- * 通过真实浏览器标签页通道下载图片并转换为 Base64
+ * 直接通过 sourceSite 对应的生效 Tab 同源拉取图片并转换为 Base64
  */
 export async function fetchImageViaTab(
   imageUrl: string,
+  sourceSite: string = "javbus",
   timeoutMs = 15000
 ): Promise<string> {
   if (typeof chrome === "undefined" || !chrome.tabs) {
     throw new SiteBlockedError("TabBridge", "当前环境不支持 chrome.tabs 扩展 API");
   }
 
-  // 1. 优先尝试复用已有同源标签页进行同源 fetch 转 Base64
-  try {
-    const parsedUrl = new URL(imageUrl);
-    const domainPattern = `*://${parsedUrl.hostname}/*`;
-    const tabs = await chrome.tabs.query({ url: domainPattern });
-    const completedTab = tabs.find((t) => t.id && t.status === "complete");
+  const tabManager = ResidentTabManager.getInstance();
+  const effectiveSite = sourceSite || "javbus";
+  const tabId = await tabManager.getValidTab(effectiveSite);
 
-    if (completedTab && completedTab.id && chrome.scripting && chrome.scripting.executeScript) {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: completedTab.id },
-        func: async (imgUrl: string) => {
-          const res = await fetch(imgUrl, { credentials: "include" });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async (imgUrl: string, timeout: number) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        try {
+          const res = await fetch(imgUrl, {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          if (res.status === 404) {
+            throw new Error("NOT_FOUND_404");
+          }
+          if (res.status === 403 || res.status === 503) {
+            throw new Error(`BLOCKED_${res.status}`);
+          }
+          if (!res.ok) {
+            throw new Error(`HTTP_${res.status}`);
+          }
           const blob = await res.blob();
           return new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
+            reader.onloadend = () => {
+              const resUrl = reader.result as string;
+              if (resUrl) resolve(resUrl);
+              else reject(new Error("FileReader 返回空结果"));
+            };
             reader.onerror = () => reject(new Error("FileReader error in tab"));
             reader.readAsDataURL(blob);
           });
-        },
-        args: [imageUrl],
-      });
-
-      const base64 = results?.[0]?.result;
-      if (base64 && typeof base64 === "string" && base64.startsWith("data:image/")) {
-        return base64;
-      }
-    }
-  } catch (err) {
-    console.warn("[TabBridge] 同源标签页下载图片失败，降级到后台静默标签页:", err);
-  }
-
-  // 2. 若无同源标签页，在后台静默打开该站点的首页，在其同源上下文中执行 fetch 并转换为 Base64
-  return new Promise<string>((resolve, reject) => {
-    let tabId: number | undefined;
-    let timer: any;
-
-    const cleanup = () => {
-      clearTimeout(timer);
-      if (typeof chrome !== "undefined" && chrome.tabs?.onUpdated) {
-        chrome.tabs.onUpdated.removeListener(onUpdatedListener);
-      }
-      if (tabId && typeof chrome !== "undefined" && chrome.tabs?.remove) {
-        chrome.tabs.remove(tabId).catch(() => {});
-      }
-    };
-
-    timer = setTimeout(() => {
-      cleanup();
-      reject(new TimeoutError("TabBridge", `图片加载超过 ${timeoutMs / 1000} 秒`));
-    }, timeoutMs);
-
-    const onUpdatedListener = async (
-      updatedTabId: number,
-      changeInfo: chrome.tabs.TabChangeInfo
-    ) => {
-      if (updatedTabId !== tabId || changeInfo.status !== "complete") return;
-
-      try {
-        if (chrome.scripting && chrome.scripting.executeScript) {
-          const results = await chrome.scripting.executeScript({
-            target: { tabId },
-            func: async (imgUrl: string) => {
-              const res = await fetch(imgUrl, { credentials: "include" });
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              const blob = await res.blob();
-              return new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.onerror = () => reject(new Error("FileReader error in tab"));
-                reader.readAsDataURL(blob);
-              });
-            },
-            args: [imageUrl],
-          });
-          const base64 = results?.[0]?.result;
-          cleanup();
-          if (base64 && typeof base64 === "string" && base64.startsWith("data:image/")) {
-            resolve(base64);
-          } else {
-            reject(new Error("未能从后台标签页转换图片为 Base64"));
-          }
-        } else {
-          cleanup();
-          reject(new Error("缺少 chrome.scripting 权限"));
+        } finally {
+          clearTimeout(timer);
         }
-      } catch (err) {
-        cleanup();
-        reject(err);
-      }
-    };
+      },
+      args: [imageUrl, timeoutMs],
+    });
 
-    chrome.tabs.onUpdated.addListener(onUpdatedListener);
-
-    const parsedUrl = new URL(imageUrl);
-    const originUrl = `${parsedUrl.origin}/`;
-
-    chrome.tabs
-      .create({ url: originUrl, active: false })
-      .then((createdTab) => {
-        tabId = createdTab.id;
-      })
-      .catch((err) => {
-        cleanup();
-        reject(err);
-      });
-  });
+    const base64 = results?.[0]?.result;
+    if (
+      typeof base64 === "string" &&
+      (base64.startsWith("data:image/") ||
+        base64.startsWith("data:application/octet-stream") ||
+        (base64.startsWith("data:") && base64.includes(";base64,")))
+    ) {
+      return base64;
+    }
+    throw new Error(`未能从常驻标签页转换图片为 Base64 (${imageUrl})`);
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    if (msg.includes("NOT_FOUND_404")) {
+      throw new MovieNotFoundError(effectiveSite, `图片不存在 (404): ${imageUrl}`);
+    }
+    if (msg.includes("BLOCKED_403") || msg.includes("BLOCKED_503")) {
+      throw new SiteBlockedError(effectiveSite, `图片访问受阻 (${msg}): ${imageUrl}`);
+    }
+    if (msg.includes("AbortError") || msg.includes("timeout")) {
+      throw new TimeoutError(effectiveSite, `图片下载超时 (${timeoutMs / 1000}s): ${imageUrl}`);
+    }
+    // 若标签页意外关闭或失效，逐出缓存
+    tabManager.evictTab(effectiveSite);
+    throw err;
+  }
 }
+
+/**
+ * 站点就绪探测便捷调用接口
+ */
+export async function checkSitesReadiness(
+  sites: TargetSiteConfig[]
+): Promise<SiteReadinessResult> {
+  return ResidentTabManager.getInstance().checkSitesReadiness(sites);
+}
+
+/**
+ * 批量打开缺失站点标签页便捷调用接口
+ */
+export async function openMissingSiteTabs(
+  sites: Array<{ id: string; baseUrl?: string; url?: string; name?: string; reason?: string }>,
+  forceReopen = false
+): Promise<void> {
+  return ResidentTabManager.getInstance().openMissingSiteTabs(sites, forceReopen);
+}
+

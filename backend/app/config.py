@@ -155,6 +155,7 @@ class SummarizerExtraFanartsConfig(BaseModel):
     timeout: float = 10.0
     max_count: int = 0
     uniform_sampling: bool = True
+    concurrency: int = Field(default=4, ge=1, le=8)  # 并发下载通道数 (1~8)
 
     @property
     def scrap_interval_seconds(self) -> float:
@@ -198,7 +199,6 @@ class CrawlerConfig(BaseModel):
     """爬虫调度与友好抓取延时配置。"""
     sleep_after_scraping: float = 2.0
     sleep_jitter: float = 2.0
-    tab_bridge_hosts: list[str] = Field(default_factory=lambda: ["airav.io"])
     # 大批量抓取请求冷却防风控保护 (Burst Protection)
     burst_protection_enabled: bool = True
     burst_limit: int = 10

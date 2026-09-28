@@ -39,11 +39,6 @@ class RawConfigRequest(BaseModel):
     yaml: str
 
 
-class TabBridgeHostRequest(BaseModel):
-    """添加 Tab 桥接站点域名请求体。"""
-    host: str
-
-
 class CleanNfoRequest(BaseModel):
     """NFO 标签清理请求体。"""
     directory: str
@@ -131,6 +126,7 @@ async def get_configuration() -> dict[str, Any]:
         "timeout": config.summarizer.extra_fanarts.timeout,
         "max_count": config.summarizer.extra_fanarts.max_count,
         "uniform_sampling": config.summarizer.extra_fanarts.uniform_sampling,
+        "concurrency": config.summarizer.extra_fanarts.concurrency,
     }
     return data
 
@@ -185,55 +181,6 @@ async def reset_configuration() -> dict[str, Any]:
         "message": "已恢复为系统默认配置",
         "config": dumped,
     }
-
-
-@router.post("/config/tab-bridge-hosts")
-async def add_tab_bridge_host(req: TabBridgeHostRequest) -> dict[str, Any]:
-    """将指定域名加入永久 TabBridge 绕过名单并写回 config.yml。"""
-    raw_host = req.host.strip().lower()
-    if "://" in raw_host:
-        raw_host = urlparse(raw_host).hostname or raw_host
-    raw_host = raw_host.split("/")[0].strip()
-
-    if not raw_host:
-        raise HTTPException(status_code=400, detail="域名不能为空")
-
-    cfg = get_config()
-    current_hosts = list(cfg.crawler.tab_bridge_hosts)
-    if raw_host not in current_hosts:
-        current_hosts.append(raw_host)
-        cfg.crawler.tab_bridge_hosts = current_hosts
-        save_config(cfg)
-        await manager.broadcast("CONFIG_UPDATED", {"config": cfg.model_dump()})
-
-    return {
-        "status": "ok",
-        "tab_bridge_hosts": cfg.crawler.tab_bridge_hosts,
-    }
-
-
-@router.delete("/config/tab-bridge-hosts/{host}")
-async def remove_tab_bridge_host(host: str) -> dict[str, Any]:
-    """从永久 TabBridge 绕过名单中移除指定域名并写回 config.yml。"""
-    raw_host = host.strip().lower()
-    if "://" in raw_host:
-        raw_host = urlparse(raw_host).hostname or raw_host
-    raw_host = raw_host.split("/")[0].strip()
-
-    cfg = get_config()
-    current_hosts = list(cfg.crawler.tab_bridge_hosts)
-    if raw_host in current_hosts:
-        current_hosts.remove(raw_host)
-        cfg.crawler.tab_bridge_hosts = current_hosts
-        save_config(cfg)
-        await manager.broadcast("CONFIG_UPDATED", {"config": cfg.model_dump()})
-
-    return {
-        "status": "ok",
-        "tab_bridge_hosts": cfg.crawler.tab_bridge_hosts,
-    }
-
-
 
 
 @router.get("/image")

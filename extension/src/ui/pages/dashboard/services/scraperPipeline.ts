@@ -1,4 +1,4 @@
-import { ScanMovieItem, MovieInfo, RequestRetryConfig } from "../../../../crawlers/types";
+import { ScanMovieItem, MovieInfo, RequestRetryConfig, AttributedCover } from "../../../../crawlers/types";
 import { JavBusCrawler } from "../../../../crawlers/javbus";
 import { JavDBCrawler } from "../../../../crawlers/javdb";
 import { AirAVCrawler } from "../../../../crawlers/airav";
@@ -54,47 +54,79 @@ export function getSourceLabel(url: string, proxyFree?: Record<string, string>):
 }
 
 /**
- * 候选封面多源回退下载
+ * 候选封面多源回退下载 (基于 Source Attribution 来源透传)
  */
 export async function downloadCoversWithFallback(
-  candidateUrls: string[],
+  candidates: (AttributedCover | string)[],
   dvdid: string,
   retryConfig: RequestRetryConfig,
   addLog: (level: LogEntry["level"], message: string) => void,
   proxyFree?: Record<string, string>
-): Promise<{ coverBase64: string; matchedCoverUrl?: string }> {
+): Promise<{ coverBase64: string; matchedCoverUrl?: string; matchedSource?: string }> {
   let coverBase64 = "";
   let matchedCoverUrl: string | undefined;
+  let matchedSource: string | undefined;
 
-  if (candidateUrls.length === 0) {
+  if (candidates.length === 0) {
     addLog("warn", `[${dvdid}] 元数据中未包含任何封面图片地址，将使用默认无图模式`);
     return { coverBase64: "" };
   }
 
-  addLog("step", `[${dvdid}] 准备下载封面，共发现 ${candidateUrls.length} 个候选图片源`);
-  console.groupCollapsed?.(`[JavSP] 封面下载队列: ${dvdid}`);
-  console.log("候选封面列表:", candidateUrls);
+  // 归一化 candidates 为 AttributedCover[]
+  const attributedCandidates: AttributedCover[] = candidates.map((c) => {
+    if (typeof c === "string") {
+      let inferred = "";
+      const lower = c.toLowerCase();
+      if (proxyFree) {
+        for (const [site, pUrl] of Object.entries(proxyFree)) {
+          if (pUrl && pUrl.trim()) {
+            const host = pUrl.replace(/^https?:\/\//i, "").split("/")[0].toLowerCase();
+            if (host && lower.includes(host)) {
+              inferred = site;
+              break;
+            }
+          }
+        }
+      }
+      if (!inferred) {
+        if (lower.includes("javdb") || lower.includes("jdbstatic")) inferred = "javdb";
+        else if (lower.includes("airav")) inferred = "airav";
+        else inferred = "javbus";
+      }
+      return { url: c, sourceSite: inferred, isBig: false };
+    }
+    return c;
+  });
 
-  for (let i = 0; i < candidateUrls.length; i++) {
-    const targetUrl = candidateUrls[i];
-    const sourceName = getSourceLabel(targetUrl, proxyFree);
-    const progressLabel = `(${i + 1}/${candidateUrls.length})`;
+  addLog("step", `[${dvdid}] 准备下载封面，共发现 ${attributedCandidates.length} 个候选图片源`);
+  console.groupCollapsed?.(`[JavSP] 封面下载队列: ${dvdid}`);
+  console.log("候选封面列表:", attributedCandidates);
+
+  for (let i = 0; i < attributedCandidates.length; i++) {
+    const candidate = attributedCandidates[i];
+    const sourceName = (candidate.sourceSite || "javbus").toUpperCase();
+    const progressLabel = `(${i + 1}/${attributedCandidates.length})`;
 
     addLog("step", `[${dvdid}] 正在下载封面 ${progressLabel} [${sourceName}]...`);
-    console.log(`[JavSP] 尝试候选 ${progressLabel} [${sourceName}]:`, targetUrl);
+    console.log(`[JavSP] 尝试候选 ${progressLabel} [${sourceName}]:`, candidate.url);
 
     try {
-      coverBase64 = await BaseCrawler.fetchImageAsBase64(targetUrl, retryConfig);
+      coverBase64 = await BaseCrawler.fetchImageAsBase64(
+        candidate.url,
+        candidate.sourceSite || "javbus",
+        retryConfig
+      );
       const sizeKb = Math.round((coverBase64.length * 0.75) / 1024);
       addLog("info", `[${dvdid}] 封面下载成功 ${progressLabel} [${sourceName}]: 约 ${sizeKb} KB`);
-      console.log(`[JavSP] 封面下载成功:`, targetUrl, `${sizeKb} KB`);
-      matchedCoverUrl = targetUrl;
+      console.log(`[JavSP] 封面下载成功:`, candidate.url, `${sizeKb} KB`);
+      matchedCoverUrl = candidate.url;
+      matchedSource = candidate.sourceSite;
       break;
     } catch (err: any) {
       const errMsg = err?.message || String(err);
-      console.warn(`[JavSP] 候选封面下载失败 ${progressLabel} [${sourceName}]:`, targetUrl, err);
+      console.warn(`[JavSP] 候选封面下载失败 ${progressLabel} [${sourceName}]:`, candidate.url, err);
 
-      if (i < candidateUrls.length - 1) {
+      if (i < attributedCandidates.length - 1) {
         addLog(
           "warn",
           `[${dvdid}] 候选封面下载失败 ${progressLabel} [${sourceName}]: ${errMsg}，正在尝试下一个备选源...`
@@ -107,19 +139,19 @@ export async function downloadCoversWithFallback(
   }
   console.groupEnd?.();
 
-  return { coverBase64, matchedCoverUrl };
+  return { coverBase64, matchedCoverUrl, matchedSource };
 }
 
 /**
- * 剧照均匀抽样下载
+ * 剧照并发滑动窗口池下载
  */
 export async function downloadExtraFanarts(
   previewPics: string[],
   dvdid: string,
+  sourceSite: string,
   crawlerConfig: CrawlerRuntimeConfig,
   addLog: (level: LogEntry["level"], message: string) => void
 ): Promise<string[]> {
-  const extraFanartsBase64: string[] = [];
   const maxCount = crawlerConfig.extraFanartsMaxCount;
   const totalPics = previewPics.length;
   let targetPics: string[];
@@ -136,6 +168,10 @@ export async function downloadExtraFanarts(
     targetPics = previewPics;
   }
 
+  if (targetPics.length === 0) {
+    return [];
+  }
+
   const planMsg = isSampled
     ? `准备下载剧照 (从 ${totalPics} 张中均匀抽样选取 ${targetPics.length} 张)...`
     : `准备下载剧照 (计划下载 ${targetPics.length} 张)...`;
@@ -145,41 +181,85 @@ export async function downloadExtraFanarts(
     maxRetries: 1,
     timeoutMs: (crawlerConfig.extraFanartsTimeout || 8) * 1000,
     baseDelayMs: 1000,
-    onRetry: (attempt, max, reason) => {
-      addLog(
-        "warn",
-        `[${dvdid}] 剧照下载遇到网络抖动 (${reason})，正在快速重试 (${attempt}/${max})...`
-      );
-    },
   };
 
-  for (let pIdx = 0; pIdx < targetPics.length; pIdx++) {
-    const pUrl = targetPics[pIdx];
-    try {
-      const pB64 = await BaseCrawler.fetchImageAsBase64(pUrl, imageRetryConfig);
-      extraFanartsBase64.push(pB64);
-      addLog("step", `[${dvdid}] 剧照下载成功 (${pIdx + 1}/${targetPics.length})`);
-    } catch (pErr: any) {
-      addLog(
-        "warn",
-        `[${dvdid}] 剧照 (${pIdx + 1}/${targetPics.length}) 下载跳过: ${
-          pErr?.message || pErr
-        }`
-      );
+  // 来源容错兜底
+  let effectiveSource = sourceSite;
+  if (!effectiveSource) {
+    const first = targetPics[0]?.toLowerCase() || "";
+    if (crawlerConfig.proxyFree) {
+      for (const [site, pUrl] of Object.entries(crawlerConfig.proxyFree)) {
+        if (pUrl && pUrl.trim()) {
+          const host = pUrl.replace(/^https?:\/\//i, "").split("/")[0].toLowerCase();
+          if (host && first.includes(host)) {
+            effectiveSource = site;
+            break;
+          }
+        }
+      }
     }
-
-    if (crawlerConfig.extraFanartsInterval > 0 && pIdx < targetPics.length - 1) {
-      await new Promise((r) =>
-        setTimeout(r, crawlerConfig.extraFanartsInterval * 1000)
-      );
+    if (!effectiveSource) {
+      if (first.includes("javdb") || first.includes("jdbstatic")) effectiveSource = "javdb";
+      else if (first.includes("airav")) effectiveSource = "airav";
+      else effectiveSource = "javbus";
     }
   }
-  addLog(
-    "info",
-    `[${dvdid}] 剧照下载完成，成功下载 ${extraFanartsBase64.length}/${targetPics.length} 张`
+
+  const concurrency = Math.max(1, Math.min(8, crawlerConfig.extraFanartsConcurrency || 4));
+  const intervalSec = crawlerConfig.extraFanartsInterval ?? 0;
+
+  const results: Array<{ index: number; base64?: string }> = [];
+  let currentIndex = 0;
+  let completedCount = 0;
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, targetPics.length) },
+    async () => {
+      while (currentIndex < targetPics.length) {
+        const idx = currentIndex++;
+        const pUrl = targetPics[idx];
+        try {
+          const b64 = await BaseCrawler.fetchImageAsBase64(
+            pUrl,
+            effectiveSource,
+            imageRetryConfig
+          );
+          results.push({ index: idx, base64: b64 });
+        } catch (err: any) {
+          addLog(
+            "warn",
+            `[${dvdid}] 剧照 (${idx + 1}/${targetPics.length}) 下载失败跳过: ${
+              err?.message || err
+            }`
+          );
+        } finally {
+          completedCount++;
+          addLog(
+            "step",
+            `[${dvdid}] 正在并发下载剧照 (${completedCount}/${targetPics.length})...`
+          );
+        }
+
+        // 若用户主动配置了单通道间隔延时，在此执行非阻塞休眠
+        if (intervalSec > 0 && currentIndex < targetPics.length) {
+          await new Promise((r) => setTimeout(r, intervalSec * 1000));
+        }
+      }
+    }
   );
 
-  return extraFanartsBase64;
+  await Promise.all(workers);
+
+  // 按原始图片序列排序保证顺序一致，过滤失败项
+  const sorted = results.sort((a, b) => a.index - b.index);
+  const finalFanarts = sorted.map((r) => r.base64!).filter(Boolean);
+
+  addLog(
+    "info",
+    `[${dvdid}] 剧照下载完成，成功下载 ${finalFanarts.length}/${targetPics.length} 张`
+  );
+
+  return finalFanarts;
 }
 
 /**
@@ -358,15 +438,22 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
   });
 
   // 阶段 5: 下载高清封面并转为 Base64 (多源候选回退机制，确保只下载一次)
-  const rawCandidates: string[] = [
-    summarized.cover,
-    ...(summarized.big_covers || []),
-    ...(summarized.covers || []),
-  ];
-  const candidateUrls = Array.from(new Set(rawCandidates.filter(Boolean)));
+  const candidateCoversToTry: (AttributedCover | string)[] =
+    summarized.candidate_covers_attributed &&
+    summarized.candidate_covers_attributed.length > 0
+      ? summarized.candidate_covers_attributed
+      : Array.from(
+          new Set(
+            [
+              summarized.cover,
+              ...(summarized.big_covers || []),
+              ...(summarized.covers || []),
+            ].filter(Boolean)
+          )
+        );
 
   const { coverBase64, matchedCoverUrl } = await downloadCoversWithFallback(
-    candidateUrls,
+    candidateCoversToTry,
     item.dvdid,
     retryConfig,
     addLog,
@@ -394,6 +481,7 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
     extraFanartsBase64 = await downloadExtraFanarts(
       summarized.preview_pics,
       item.dvdid,
+      summarized.preview_source || "javbus",
       crawlerConfig,
       addLog
     );

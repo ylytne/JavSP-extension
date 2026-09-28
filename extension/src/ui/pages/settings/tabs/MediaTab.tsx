@@ -160,7 +160,30 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
         </div>
 
         {formConfig.summarizer.extra_fanarts.enabled && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                并发下载通道数 (Concurrency)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="8"
+                step="1"
+                value={formConfig.summarizer.extra_fanarts.concurrency ?? 4}
+                onChange={(e) =>
+                  updateForm((cfg) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    cfg.summarizer.extra_fanarts.concurrency = isNaN(parsed)
+                      ? 4
+                      : Math.max(1, Math.min(8, parsed));
+                    return cfg;
+                  })
+                }
+                className="w-full text-xs font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
             <div>
               <label className="block text-[11px] font-medium text-slate-600 mb-1">
                 最大抓取张数 (0 为不限制)
@@ -182,7 +205,7 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
 
             <div>
               <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                抓取间隔 (秒)
+                单通道间隔延时 (秒，并发模式推荐 0)
               </label>
               <input
                 type="number"
@@ -191,7 +214,8 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
                 value={formConfig.summarizer.extra_fanarts.scrap_interval}
                 onChange={(e) =>
                   updateForm((cfg) => {
-                    cfg.summarizer.extra_fanarts.scrap_interval = parseFloat(e.target.value) || 0.5;
+                    const parsed = parseFloat(e.target.value);
+                    cfg.summarizer.extra_fanarts.scrap_interval = isNaN(parsed) ? 0 : Math.max(0, parsed);
                     return cfg;
                   })
                 }
