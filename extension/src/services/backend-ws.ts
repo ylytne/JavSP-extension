@@ -226,7 +226,6 @@ export class BackendWsClient {
       uncensored?: boolean;
       baseOutputDir?: string;
       extraFanartsBase64?: string[];
-      actressPicsBase64?: Record<string, string>;
     }
   ): void {
     this.send(
@@ -236,7 +235,6 @@ export class BackendWsClient {
         metadata,
         coverBase64: coverBase64 || null,
         extra_fanarts_base64: extra?.extraFanartsBase64 || [],
-        actress_pics_base64: extra?.actressPicsBase64 || {},
         files: extra?.files,
         hard_sub: extra?.hardSub,
         uncensored: extra?.uncensored,

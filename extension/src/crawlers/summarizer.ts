@@ -118,7 +118,6 @@ export function summarizeMovieResults(
     genre: [],
     genre_id: [],
     actress: [],
-    actress_pics: {},
     preview_pics: [],
     magnet: [],
   };
@@ -356,23 +355,6 @@ export function summarizeMovieResults(
         merged.actress = cleanActors;
         break;
       }
-    }
-  }
-
-  // 头像字典收集（主要来自 JavBus，按 priorityOrder 吸收）
-  // 同时对头像 Key 进行别名括号清洗，确保与 merged.actress 中的规范主名 1:1 对齐
-  for (const site of priorityOrder) {
-    const data = siteData[site];
-    if (data?.actress_pics) {
-      const normalizedPics: Record<string, string> = {};
-      for (const [rawName, picUrl] of Object.entries(data.actress_pics)) {
-        if (!picUrl) continue;
-        const targetKey = shouldCleanActress ? cleanActressName(rawName) : rawName.trim();
-        if (targetKey) {
-          normalizedPics[targetKey] = picUrl;
-        }
-      }
-      merged.actress_pics = { ...normalizedPics, ...merged.actress_pics };
     }
   }
 

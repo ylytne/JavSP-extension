@@ -16,9 +16,6 @@ const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
   extraFanartsMaxCount: 0,
   extraFanartsUniformSampling: true,
   extraFanartsTimeout: 10,
-  actressAvatarEnabled: false,
-  actressAvatarInterval: 0.5,
-  actressAvatarTimeout: 10,
   includeTrailer: false,
   crawlers: ["javbus", "javdb", "airav"],
   useJavdbCover: "fallback",
@@ -54,7 +51,6 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
     const net = cfg.network || {};
     const crw = cfg.crawler || {};
     const extra = cfg.summarizer?.extra_fanarts || cfg.extra_fanarts || {};
-    const actressAvatar = cfg.summarizer?.actress_avatar || cfg.actress_avatar || {};
     const nfoCfg = cfg.summarizer?.nfo || cfg.nfo || {};
     const coverCfg = cfg.summarizer?.cover || cfg.cover || {};
 
@@ -82,9 +78,6 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
       extraFanartsMaxCount: typeof extra.max_count === "number" ? extra.max_count : prev.extraFanartsMaxCount,
       extraFanartsUniformSampling: typeof extra.uniform_sampling === "boolean" ? extra.uniform_sampling : prev.extraFanartsUniformSampling,
       extraFanartsTimeout: typeof extra.timeout === "number" ? extra.timeout : prev.extraFanartsTimeout,
-      actressAvatarEnabled: typeof actressAvatar.enabled === "boolean" ? actressAvatar.enabled : prev.actressAvatarEnabled,
-      actressAvatarInterval: actressAvatar.scrap_interval ?? prev.actressAvatarInterval,
-      actressAvatarTimeout: typeof actressAvatar.timeout === "number" ? actressAvatar.timeout : prev.actressAvatarTimeout,
       includeTrailer: typeof nfoCfg.include_trailer === "boolean" ? nfoCfg.include_trailer : prev.includeTrailer,
       crawlers: Array.isArray(cfg.crawlers) && cfg.crawlers.length > 0 ? cfg.crawlers : prev.crawlers,
       useJavdbCover: (coverCfg.use_javdb_cover === "never" ? "never" : "fallback") as "fallback" | "never",

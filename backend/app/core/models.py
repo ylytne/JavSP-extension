@@ -32,7 +32,6 @@ class MovieInfo(BaseModel):
     genre_id: list[str] = Field(default_factory=list)
     genre_norm: list[str] = Field(default_factory=list)
     actress: list[str] = Field(default_factory=list)
-    actress_pics: dict[str, str] = Field(default_factory=dict)
     preview_pics: list[str] = Field(default_factory=list)
     preview_video: str | None = None
     uncensored: bool | None = None

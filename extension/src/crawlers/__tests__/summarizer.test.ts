@@ -117,7 +117,6 @@ describe("summarizeMovieResults", () => {
     genre: ["温泉", "巨乳"],
     genre_id: ["v", "2h"],
     actress: ["相沢みなみ"],
-    actress_pics: { "相沢みなみ": "https://javbus.com/avatar.jpg" },
     preview_pics: ["https://javbus.com/p1.jpg", "https://javbus.com/p2.jpg"],
   };
 
@@ -358,27 +357,21 @@ describe("summarizeMovieResults", () => {
         title: "究極のぬるぬるオーガズム 涼森れむ",
         cover: "https://javbus.com/cover.jpg",
         actress: ["涼森れむ"], // 日文原名
-        actress_pics: { "涼森れむ": "https://javbus.com/remu.jpg" },
       },
     };
 
-    // 即使 priorityOrder 将 airav 排在首位，女优也应当单源采纳权威日文名与头像，严禁中日文重复并集
+    // 即使 priorityOrder 将 airav 排在首位，女优也应当单源采纳权威日文名，严禁中日文重复并集
     const summarized = summarizeMovieResults(siteData, ["airav", "javbus"]);
     expect(summarized.actress).toEqual(["涼森れむ"]);
-    expect(summarized.actress_pics).toEqual({ "涼森れむ": "https://javbus.com/remu.jpg" });
   });
 
-  it("should strip alias parentheses from actress name and align actress_pics keys", () => {
+  it("should strip alias parentheses from actress name", () => {
     const siteData: Record<string, Partial<MovieInfo>> = {
       javbus: {
         dvdid: "SOE-999",
         title: "超高級ソープへようこそ めぐり（藤浦めぐ）",
         cover: "https://javbus.com/soe999.jpg",
         actress: ["めぐり（藤浦めぐ）", "葵つかさ(葵司)"],
-        actress_pics: {
-          "めぐり（藤浦めぐ）": "https://javbus.com/meguri.jpg",
-          "葵つかさ(葵司)": "https://javbus.com/aoi.jpg",
-        },
       },
     };
 
@@ -386,11 +379,6 @@ describe("summarizeMovieResults", () => {
 
     // 女优名字切括号
     expect(summarized.actress).toEqual(["めぐり", "葵つかさ"]);
-    // 头像 Key 自动对齐重命名为主艺名
-    expect(summarized.actress_pics).toEqual({
-      めぐり: "https://javbus.com/meguri.jpg",
-      葵つかさ: "https://javbus.com/aoi.jpg",
-    });
     // 标题尾部女优名（包含带括号的原名）应被成功清洗
     expect(summarized.title).toBe("超高級ソープへようこそ");
   });
@@ -402,9 +390,6 @@ describe("summarizeMovieResults", () => {
         title: "超高級ソープへようこそ めぐり（藤浦めぐ）",
         cover: "https://javbus.com/soe999.jpg",
         actress: ["めぐり（藤浦めぐ）"],
-        actress_pics: {
-          "めぐり（藤浦めぐ）": "https://javbus.com/meguri.jpg",
-        },
       },
     };
 
@@ -413,9 +398,6 @@ describe("summarizeMovieResults", () => {
     });
 
     expect(summarized.actress).toEqual(["めぐり（藤浦めぐ）"]);
-    expect(summarized.actress_pics).toEqual({
-      "めぐり（藤浦めぐ）": "https://javbus.com/meguri.jpg",
-    });
   });
 
   it("should throw error if title is missing", () => {

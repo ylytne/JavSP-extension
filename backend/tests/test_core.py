@@ -114,7 +114,6 @@ def test_nfo_generation(tmp_path: Path):
         producer="IdeaPocket",
         serial="相思相愛",
         actress=["相沢みなみ"],
-        actress_pics={"相沢みなみ": "https://example.com/actress.jpg"},
         genre=["高清", "中文字幕"],
         cover="https://example.com/cover.jpg",
         preview_video="https://example.com/preview.m3u8",
@@ -126,7 +125,7 @@ def test_nfo_generation(tmp_path: Path):
     assert "<studio>IdeaPocket</studio>" in xml_str
     assert "<actor>" in xml_str
     assert "<name>相沢みなみ</name>" in xml_str
-    # 核心安全规范：默认模式下彻底杜绝外部 URL 写入，防止 Jellyfin 产生网络挂起卡死
+    # 核心安全规范：彻底杜绝 <thumb> 节点与外部 URL 写入，防止 Jellyfin 等产生网络卡死
     assert "<thumb>" not in xml_str
     assert "https://example.com/actress.jpg" not in xml_str
 
@@ -138,12 +137,6 @@ def test_nfo_generation(tmp_path: Path):
     cfg_trailer.summarizer.nfo.include_trailer = True
     xml_trailer = generate_nfo_content(info, config=cfg_trailer)
     assert "<trailer>https://example.com/preview.m3u8</trailer>" in xml_trailer
-
-    # 验证 local 模式下，当提供 local_actors 时写入本地相对路径
-    cfg_local = get_config().model_copy(deep=True)
-    cfg_local.summarizer.nfo.actress_thumb_mode = "local"
-    xml_local = generate_nfo_content(info, config=cfg_local, local_actors=["相沢みなみ"])
-    assert "<thumb>.actors/相沢みなみ.jpg</thumb>" in xml_local
 
     nfo_file = tmp_path / "movie.nfo"
     written = write_nfo(info, nfo_file)
@@ -242,11 +235,8 @@ def test_organizer_hardsub_and_step_callback(tmp_path: Path):
     assert any(step == "CROPPING_POSTER" for step, _ in steps_recorded)
 
 
-def test_organizer_actress_alias_and_deduplication(tmp_path: Path, monkeypatch):
-    """验证包含中日双语多别名的同一女优在归档目录与 NFO 中能正确去重并保留头像。"""
-    cfg = get_config()
-    monkeypatch.setattr(cfg.summarizer.actress_avatar, "enabled", True)
-
+def test_organizer_actress_alias_and_deduplication(tmp_path: Path):
+    """验证包含中日双语多别名的同一女优在归档目录与 NFO 中能正确去重，且不生成 .actors 目录。"""
     movie_folder = tmp_path / "in_abf"
     movie_folder.mkdir()
     f1 = movie_folder / "ABF-358.mp4"
@@ -256,7 +246,6 @@ def test_organizer_actress_alias_and_deduplication(tmp_path: Path, monkeypatch):
         dvdid="ABF-358",
         title="究極のぬるぬるオーガズム",
         actress=["涼森玲夢", "涼森れむ"],  # 繁简/中文与日文同女优别名
-        actress_pics={"涼森れむ": "https://example.com/remu.jpg"},
         cover="https://example.com/cover.jpg",
     )
     b64 = create_dummy_image_base64(800, 533)
@@ -264,7 +253,6 @@ def test_organizer_actress_alias_and_deduplication(tmp_path: Path, monkeypatch):
         files=[str(f1)],
         metadata=meta,
         cover_base64=b64,
-        actress_pics_base64={"涼森玲夢": b64},  # 用别名传入头像 Base64
         base_output_dir=tmp_path / "out_abf",
         hard_sub=True,
         uncensored=False,
@@ -278,9 +266,8 @@ def test_organizer_actress_alias_and_deduplication(tmp_path: Path, monkeypatch):
 
     # 验证元数据实例同步清洗规整
     assert meta.actress == ["涼森れむ"]
-    assert "涼森れむ" in meta.actress_pics
 
-    # 验证生成的 NFO XML 文件（与视频同名，默认不写入有毒外链，彻底杜绝外网卡死）
+    # 验证生成的 NFO XML 文件（与视频同名，彻底杜绝 thumb 与有毒外链）
     nfo_file = p_out / "ABF-358-C.nfo"
     assert nfo_file.exists()
     nfo_text = nfo_file.read_text(encoding="utf-8")
@@ -290,11 +277,8 @@ def test_organizer_actress_alias_and_deduplication(tmp_path: Path, monkeypatch):
     assert "https://example.com/remu.jpg" not in nfo_text
     assert "<name>涼森玲夢</name>" not in nfo_text
 
-    # 验证本地 .actors/ 目录及别名规范化落盘
-    actors_dir = p_out / ".actors"
-    assert actors_dir.is_dir()
-    assert (actors_dir / "涼森れむ.jpg").is_file()
-    assert not (actors_dir / "涼森玲夢.jpg").exists()
+    # 验证坚决不创建本地 .actors/ 隐藏目录
+    assert not (p_out / ".actors").exists()
 
 
 def test_scanner_unrecognized_video(tmp_path: Path, monkeypatch):
@@ -428,45 +412,21 @@ def test_organizer_corrupt_image_graceful(tmp_path: Path):
     assert any(f.endswith(".nfo") for f in out_files)
 
 
-def test_save_actress_avatars_and_local_thumb(tmp_path: Path):
-    """验证女优头像落盘至 .actors/ 隐藏目录、损坏数据跳过及 local 模式下的 NFO 渲染。"""
-    from app.core.organizer import save_actress_avatars
+def test_actress_nfo_without_thumb_and_no_actors_dir(tmp_path: Path):
+    """验证女优 NFO 渲染纯净演员标签，永不写入 <thumb>，且不调用头像落盘。"""
+    import app.core.organizer as org_mod
+    assert not hasattr(org_mod, "save_actress_avatars"), "save_actress_avatars 应已彻底删除"
 
-    target_dir = tmp_path / "movie_item"
-    target_dir.mkdir()
-
-    valid_b64 = create_dummy_image_base64(200, 200)
-    pics = {
-        "相沢みなみ": valid_b64,
-        "涼森玲夢": valid_b64,  # 别名应规整为 涼森れむ
-        "破损女优": "corrupted_base64_data",
-    }
-
-    saved = save_actress_avatars(pics, target_dir)
-    assert "相沢みなみ" in saved
-    assert "涼森れむ" in saved
-    assert "破损女优" not in saved
-
-    actors_dir = target_dir / ".actors"
-    assert actors_dir.is_dir()
-    assert (actors_dir / "相沢みなみ.jpg").is_file()
-    assert (actors_dir / "涼森れむ.jpg").is_file()
-    assert not (actors_dir / "涼森玲夢.jpg").exists()
-
-    # 验证 local 模式下的 NFO
     info = MovieInfo(
         dvdid="TEST-001",
         title="测试",
         actress=["相沢みなみ", "涼森れむ", "无头像女优"],
         cover="http://example.com/c.jpg",
     )
-    cfg_local = get_config().model_copy(deep=True)
-    cfg_local.summarizer.nfo.actress_thumb_mode = "local"
-
-    xml_text = generate_nfo_content(info, config=cfg_local, local_actors=saved)
-    assert "<thumb>.actors/相沢みなみ.jpg</thumb>" in xml_text
-    assert "<thumb>.actors/涼森れむ.jpg</thumb>" in xml_text
-    # 无本地头像的女优绝不包含 <thumb>
+    xml_text = generate_nfo_content(info)
+    assert "<thumb>" not in xml_text
+    assert "<actor>\n    <name>相沢みなみ</name>\n  </actor>" in xml_text
+    assert "<actor>\n    <name>涼森れむ</name>\n  </actor>" in xml_text
     assert "<actor>\n    <name>无头像女优</name>\n  </actor>" in xml_text
     # 彻底杜绝外网 URL
     assert "http://" not in xml_text and "https://" not in xml_text

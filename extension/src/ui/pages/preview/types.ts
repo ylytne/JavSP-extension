@@ -25,7 +25,6 @@ export interface SimulatedLandingData {
   posterFilename: string;
   fanartFilename: string;
   extrafanartsFiles: string[];
-  actorAvatarFiles: string[];
   cleanedDict: Record<string, string>;
   croppedPosterBase64?: string;
   genreNorm?: string[];

@@ -465,7 +465,6 @@ class PreviewOrganizeResponse(BaseModel):
     poster_filename: str
     fanart_filename: str
     extrafanarts_files: list[str]
-    actor_avatar_files: list[str]
     cleaned_dict: dict[str, Any]
     cropped_poster_base64: str | None = None
     genre_norm: list[str] = Field(default_factory=list)

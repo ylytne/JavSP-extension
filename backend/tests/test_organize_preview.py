@@ -148,8 +148,8 @@ def test_preview_organize_long_title_truncation(client):
     assert truncated.endswith("…") or len(truncated) <= 100
 
 
-def test_preview_organize_sample_fanart_and_avatar(client):
-    """测试剧照采样与女优本地头像模拟。"""
+def test_preview_organize_sample_fanart(client):
+    """测试剧照采样模拟及验证无 actor_avatar_files。"""
     req_body = {
         "metadata": {
             "dvdid": "JUL-500",
@@ -168,10 +168,7 @@ def test_preview_organize_sample_fanart_and_avatar(client):
         assert len(data["extrafanarts_files"]) == 1
         assert data["extrafanarts_files"][0] == "extrafanart/0.jpg"
 
-    if cfg.summarizer.actress_avatar.enabled:
-        assert len(data["actor_avatar_files"]) == 2
-        assert ".actors/河北彩花.jpg" in data["actor_avatar_files"]
-        assert ".actors/三上悠亜.jpg" in data["actor_avatar_files"]
+    assert "actor_avatar_files" not in data
 
 
 def test_preview_organize_genre_norm_and_actress_cleaning(client):

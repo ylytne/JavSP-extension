@@ -50,12 +50,11 @@ def resolve_actress_alias(name: str) -> str:
 
 
 def clean_movie_actresses(info: MovieInfo) -> list[str]:
-    """对 MovieInfo 中的演员列表及头像字典进行别名规范化与去重清洗。
+    """对 MovieInfo 中的演员列表进行别名规范化与去重清洗。
 
     1. 将别名（繁体/中文译名/其他别名）规整为主名（主规范名）；
     2. 过滤空白，有序去重（保留首现顺序）；
-    3. 规整 actress_pics 的 key 为主规范名，确保头像正常关联；
-    4. 同步回写 MovieInfo 实例的 actress 与 actress_pics。
+    3. 同步回写 MovieInfo 实例的 actress。
 
     Args:
         info: 待清洗的 MovieInfo 实例。
@@ -74,13 +73,4 @@ def clean_movie_actresses(info: MovieInfo) -> list[str]:
                 cleaned_actresses.append(canonical)
 
     info.actress = cleaned_actresses
-
-    if info.actress_pics:
-        new_pics: dict[str, str] = {}
-        for act_name, pic_url in info.actress_pics.items():
-            canonical = resolve_actress_alias(act_name)
-            if canonical and canonical not in new_pics:
-                new_pics[canonical] = pic_url
-        info.actress_pics = new_pics
-
     return cleaned_actresses

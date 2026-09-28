@@ -98,7 +98,6 @@ def clean_plot_text(
 def generate_nfo_content(
     info: MovieInfo,
     config: AppConfig | None = None,
-    local_actors: set[str] | list[str] | None = None,
 ) -> str:
     """根据 MovieInfo 实例构造符合 Kodi / Jellyfin / Emby 规范的 NFO XML 字符串。"""
     # 标签分类清洗与规范化
@@ -201,23 +200,13 @@ def generate_nfo_content(
     if cfg.summarizer.nfo.include_trailer and info.preview_video:
         movie_elem.append(E.trailer(info.preview_video))
 
-    # 16. 演员与头像
-    # 核心安全规范：代码层面彻底杜绝写入外部 HTTP(S) URL，防止 Jellyfin 等媒体服务器并发抓取外网图床导致前端彻底卡死及 403 阻断。
-    thumb_mode = cfg.summarizer.nfo.actress_thumb_mode
-    local_actors_set = set(local_actors or [])
-
+    # 16. 演员（生成规范化演员节点，不写 <thumb>，依靠媒体库全局人物库匹配头像）
     if info.actress:
         for act in info.actress:
             act_clean = act.strip()
             if not act_clean:
                 continue
-            # 仅当显式配置为 local 且本地存在该女优头像（落盘于 .actors/）时，才写入相对路径
-            if thumb_mode == "local" and act_clean in local_actors_set:
-                rel_thumb = f".actors/{act_clean}.jpg"
-                movie_elem.append(E.actor(E.name(act_clean), E.thumb(rel_thumb)))
-            else:
-                # 默认 'none' 模式或本地未落盘：仅保留规范演员名，完全依靠播放器自动识别同级 .actors/ 或媒体库全局人物库
-                movie_elem.append(E.actor(E.name(act_clean)))
+            movie_elem.append(E.actor(E.name(act_clean)))
 
     xml_text = tostring(
         movie_elem,
@@ -232,7 +221,6 @@ def write_nfo(
     info: MovieInfo,
     nfo_path: str | Path,
     config: AppConfig | None = None,
-    local_actors: set[str] | list[str] | None = None,
 ) -> str:
     """生成 NFO 并写入文件。
 
@@ -240,13 +228,12 @@ def write_nfo(
         info: MovieInfo 实例。
         nfo_path: 输出的 .nfo 文件绝对路径。
         config: 可选的应用配置实例。
-        local_actors: 可选的已在本地 .actors/ 目录下保存头像的女优主规范名列表。
 
     Returns:
         写入的 NFO 文件绝对路径。
     """
     path = Path(nfo_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    content = generate_nfo_content(info, config=config, local_actors=local_actors)
+    content = generate_nfo_content(info, config=config)
     path.write_text(content, encoding="utf-8")
     return str(path)

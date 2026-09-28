@@ -159,22 +159,6 @@ export const SimulatedLandingView: React.FC<SimulatedLandingViewProps> = ({ repo
                   ))}
                 </div>
               )}
-
-              {/* 女优本地头像 */}
-              {landingData.actorAvatarFiles.length > 0 && (
-                <div className="pl-4 space-y-1">
-                  <div className="flex items-center gap-1.5 text-slate-600">
-                    <Folder size={13} className="text-amber-400 shrink-0" />
-                    <span>.actors /</span>
-                  </div>
-                  {landingData.actorAvatarFiles.map((f, i) => (
-                    <div key={i} className="pl-4 flex items-center gap-2 text-slate-600">
-                      <User size={12} className="text-slate-400 shrink-0" />
-                      <span>{f.replace(".actors/", "")}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 

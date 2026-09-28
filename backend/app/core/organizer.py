@@ -175,20 +175,18 @@ def organize_movie(
     metadata: MovieInfo,
     cover_base64: str | None = None,
     extra_fanarts_base64: Sequence[str] | None = None,
-    actress_pics_base64: dict[str, str] | None = None,
     base_output_dir: str | Path | None = None,
     hard_sub: bool = False,
     uncensored: bool = False,
     on_step: Callable[[str, str], None] | None = None,
 ) -> str:
-    """执行单部影片的落盘整理：生成 NFO、保存裁剪海报、移动/硬链接视频文件、保存剧照与女优本地头像。
+    """执行单部影片的落盘整理：生成 NFO、保存裁剪海报、移动/硬链接视频文件与保存剧照。
 
     Args:
         files: 本地视频文件的原始绝对路径列表。
         metadata: 刮削汇总后的 MovieInfo 结构。
         cover_base64: 可选的 Base64 封面图。
         extra_fanarts_base64: 可选的剧照 Base64 数据 URL 列表（由前端扩展下载并传输）。
-        actress_pics_base64: 可选的女优头像 Base64 字典（由前端扩展下载并传输，key 为女优名）。
         base_output_dir: 基础输出目录，若为 None 则使用第一个视频文件的父目录或配置目录。
         hard_sub: 是否有内嵌字幕。
         uncensored: 是否无码。
@@ -406,16 +404,7 @@ def organize_movie(
             except OSError:
                 pass
 
-    # 2. 保存本地女优头像 (.actors/)
-    saved_actors: list[str] = []
-    if config.summarizer.actress_avatar.enabled and actress_pics_base64:
-        saved_actors = save_actress_avatars(
-            actress_pics_base64=actress_pics_base64,
-            target_dir=target_dir,
-            on_step=on_step,
-        )
-
-    # 3. 写入 NFO 文件
+    # 2. 写入 NFO 文件
     if on_step:
         on_step("WRITING_NFO", "正在写入 NFO 文件")
 
@@ -441,7 +430,7 @@ def organize_movie(
         logger.info("检测到视频重名防覆盖整理，已同步生成独立 NFO: %s", nfo_filename)
 
     nfo_path = target_dir / nfo_filename
-    write_nfo(metadata, nfo_path, config=config, local_actors=saved_actors)
+    write_nfo(metadata, nfo_path, config=config)
 
     # 3. 处理封面图片（fanart 与 poster）
     if cover_base64:
@@ -580,92 +569,6 @@ def save_extra_fanarts(
     return saved_count
 
 
-def save_actress_avatars(
-    actress_pics_base64: dict[str, str],
-    target_dir: Path,
-    on_step: Callable[[str, str], None] | None = None,
-) -> list[str]:
-    """将前端扩展下载并传输的女优头像 Base64 数据保存到 target_dir/.actors/ 目录。
-
-    严格遵循双端协同架构职责边界：
-    网络请求、过盾与图片下载全部在前端浏览器扩展中执行，
-    后端只负责本地文件 I/O、图片完整性校验与归档落盘，绝不直接对外网发起网络请求。
-
-    Args:
-        actress_pics_base64: 演员头像 Base64 字典，key 为演员名字，value 为 Base64 字符串。
-        target_dir: 影片根目录。
-        on_step: 步骤回调通知。
-
-    Returns:
-        成功落盘头像的女优主规范名列表。
-    """
-    if not actress_pics_base64:
-        return []
-
-    actors_dir = target_dir / ".actors"
-    actors_dir.mkdir(parents=True, exist_ok=True)
-
-    total = len(actress_pics_base64)
-    saved_actresses: list[str] = []
-
-    if on_step:
-        on_step("SAVING_ACTRESS_AVATARS", f"正在落盘保存女优本地头像 (共 {total} 位)")
-
-    for raw_name, b64_item in actress_pics_base64.items():
-        canonical_name = resolve_actress_alias(str(raw_name).strip())
-        if not canonical_name:
-            continue
-
-        item_str = b64_item.strip() if isinstance(b64_item, str) else ""
-        if not item_str:
-            continue
-
-        raw_bytes: bytes | None = None
-        try:
-            if ";base64," in item_str:
-                raw_bytes = base64.b64decode(item_str.split(";base64,", 1)[1])
-            else:
-                raw_bytes = base64.b64decode(item_str)
-        except Exception as b64_err:
-            logger.warning("女优 %s 头像 Base64 解码失败: %s", canonical_name, b64_err)
-            continue
-
-        if not raw_bytes:
-            continue
-
-        # 严格校验图片完整性并统一转换为 .actors/{canonical_name}.jpg 保存
-        safe_filename = replace_illegal_chars(canonical_name)
-        dest_file = actors_dir / f"{safe_filename}.jpg"
-        try:
-            with Image.open(io.BytesIO(raw_bytes)) as img:
-                img.convert("RGB").save(dest_file, "JPEG", quality=95)
-            if canonical_name not in saved_actresses:
-                saved_actresses.append(canonical_name)
-        except Exception as img_err:
-            logger.warning("女优 %s 头像图片格式无效或损坏，跳过保存: %s", canonical_name, img_err)
-            if dest_file.is_file():
-                try:
-                    dest_file.unlink()
-                except OSError:
-                    pass
-
-    # 若未成功保存任何图片，清理生成的空目录
-    if not saved_actresses and actors_dir.is_dir():
-        try:
-            if not any(actors_dir.iterdir()):
-                actors_dir.rmdir()
-        except OSError:
-            pass
-
-    if on_step:
-        on_step(
-            "SAVING_ACTRESS_AVATARS",
-            f"女优头像保存完成，成功落盘 {len(saved_actresses)}/{total} 位",
-        )
-
-    return saved_actresses
-
-
 def simulate_movie_organization(
     metadata: MovieInfo,
     cover_base64: str | None = None,
@@ -767,8 +670,7 @@ def simulate_movie_organization(
     else:
         nfo_filename = f"{nfo_basename}.nfo"
 
-    local_actors = [act.strip() for act in metadata.actress if act.strip()] if cfg.summarizer.actress_avatar.enabled else None
-    nfo_content = generate_nfo_content(metadata, config=cfg, local_actors=local_actors)
+    nfo_content = generate_nfo_content(metadata, config=cfg)
 
     # 横版背景图与竖版海报文件名
     fanart_pat = cfg.summarizer.fanart.basename_pattern
@@ -788,14 +690,6 @@ def simulate_movie_organization(
     extrafanarts_files: list[str] = []
     if cfg.summarizer.extra_fanarts.enabled and has_sample_fanart:
         extrafanarts_files.append("extrafanart/0.jpg")
-
-    # 规划女优头像路径
-    actor_avatar_files: list[str] = []
-    if cfg.summarizer.actress_avatar.enabled and metadata.actress:
-        for act in metadata.actress:
-            act_clean = act.strip()
-            if act_clean:
-                actor_avatar_files.append(f".actors/{replace_illegal_chars(act_clean)}.jpg")
 
     # 内存级海报裁剪与角标合成
     cropped_poster_base64: str | None = None
@@ -825,7 +719,6 @@ def simulate_movie_organization(
         "poster_filename": poster_filename,
         "fanart_filename": fanart_filename,
         "extrafanarts_files": extrafanarts_files,
-        "actor_avatar_files": actor_avatar_files,
         "cleaned_dict": cleaned_dict,
         "cropped_poster_base64": cropped_poster_base64,
         "genre_norm": metadata.genre_norm or metadata.genre or [],

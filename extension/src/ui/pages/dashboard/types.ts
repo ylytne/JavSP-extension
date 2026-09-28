@@ -10,9 +10,6 @@ export interface CrawlerRuntimeConfig {
   extraFanartsMaxCount: number;
   extraFanartsUniformSampling: boolean;
   extraFanartsTimeout: number;
-  actressAvatarEnabled: boolean;
-  actressAvatarInterval: number;
-  actressAvatarTimeout: number;
   includeTrailer: boolean;
   crawlers: string[];
   useJavdbCover: "fallback" | "never";

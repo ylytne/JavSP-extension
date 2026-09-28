@@ -102,7 +102,6 @@ class SummarizerNfoConfig(BaseModel):
     title_pattern: str = "{num} {title}"
     custom_genres_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])
     custom_tags_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])
-    actress_thumb_mode: Literal["none", "local"] = "none"
     include_trailer: bool = False
     clean_plot: bool = True
     clean_plot_num: bool = True
@@ -162,18 +161,6 @@ class SummarizerExtraFanartsConfig(BaseModel):
         return parse_duration_seconds(self.scrap_interval)
 
 
-class SummarizerActressAvatarConfig(BaseModel):
-    """女优头像下载与保存配置。"""
-    enabled: bool = False
-    scrap_interval: float | int | str = 0.5
-    timeout: float = 10.0
-
-    @property
-    def scrap_interval_seconds(self) -> float:
-        """获取浮点秒数的下载请求间隔。"""
-        return parse_duration_seconds(self.scrap_interval)
-
-
 class SummarizerSubtitleConfig(BaseModel):
     """字幕文件归档整理配置。"""
     enabled: bool = True
@@ -196,7 +183,6 @@ class SummarizerConfig(BaseModel):
     cover: SummarizerCoverConfig = Field(default_factory=SummarizerCoverConfig)
     fanart: SummarizerFanartConfig = Field(default_factory=SummarizerFanartConfig)
     extra_fanarts: SummarizerExtraFanartsConfig = Field(default_factory=SummarizerExtraFanartsConfig)
-    actress_avatar: SummarizerActressAvatarConfig = Field(default_factory=SummarizerActressAvatarConfig)
     subtitle: SummarizerSubtitleConfig = Field(default_factory=SummarizerSubtitleConfig)
 
 

@@ -210,7 +210,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 )
                 base_out_dir = data.get("base_output_dir") or _last_scan_dir
                 extra_fanarts_base64 = data.get("extra_fanarts_base64") or data.get("extraFanartsBase64") or []
-                actress_pics_base64 = data.get("actress_pics_base64") or data.get("actressPicsBase64") or {}
 
                 if not files:
                     await manager.broadcast(
@@ -249,7 +248,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                             metadata=metadata,
                             cover_base64=cover_base64,
                             extra_fanarts_base64=extra_fanarts_base64,
-                            actress_pics_base64=actress_pics_base64,
                             base_output_dir=base_out_dir,
                             hard_sub=hard_sub,
                             uncensored=uncensored,

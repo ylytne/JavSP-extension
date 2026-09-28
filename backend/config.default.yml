@@ -88,11 +88,6 @@ summarizer:
     custom_tags_fields:
     - '{genre}'
     - '{censor}'
-    # 女优头像 NFO <thumb> 写入模式：
-    # - none (推荐默认): 不向 NFO 写入 <thumb> 标签，纯粹依赖本地 .actors/ 目录或媒体库全局人物库，彻底根绝 Jellyfin 外网并发卡死
-    # - local: 若本地 .actors/ 下存在对应头像，则在 <thumb> 写入相对路径 ".actors/女优名.jpg"；若本地无头像则不写 <thumb>
-    # ⚠️ 注意：为防止媒体服务器并发请求第三方图床导致前端彻底卡死及 403 阻断，代码层面已永久杜绝写入外部 HTTP(S) URL！
-    actress_thumb_mode: none
     # 是否在 NFO 中写入预告视频链接 (<trailer>)：
     # - false (推荐默认): 不生成 <trailer> 标签。部分站点抓取的 m3u8 实为第三方在线切片流，极易失效/被墙，在 Jellyfin 影院模式下可能导致严重播放卡死
     # - true: 允许写入抓取到的预告视频链接 (仅在网络通畅且需要预告流时开启)
@@ -124,10 +119,6 @@ summarizer:
     timeout: 10.0
     max_count: 10
     uniform_sampling: true
-  actress_avatar:
-    enabled: false
-    scrap_interval: 0.5
-    timeout: 10.0
   subtitle:
     enabled: true
     auto_c_suffix: false

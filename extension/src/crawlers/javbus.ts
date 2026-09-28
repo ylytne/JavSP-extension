@@ -96,18 +96,12 @@ export class JavBusCrawler extends BaseCrawler {
       }
     });
 
-    // 女优名与头像提取 (过滤 nowprinting.gif)
+    // 出演女优名提取
     const actressList: string[] = [];
-    const actressPics: Record<string, string> = {};
-
     doc.querySelectorAll(".avatar-box div img").forEach((img) => {
       const name = img.getAttribute("title")?.trim();
-      const src = img.getAttribute("src")?.trim();
       if (name) {
         actressList.push(name);
-        if (src && !src.endsWith("nowprinting.gif")) {
-          actressPics[name] = src.startsWith("http") ? src : `${this.baseUrl}${src}`;
-        }
       }
     });
 
@@ -128,7 +122,6 @@ export class JavBusCrawler extends BaseCrawler {
       genre: genres,
       genre_id: genreIds,
       actress: actressList,
-      actress_pics: actressPics,
       preview_pics: previewPics,
       uncensored,
     });

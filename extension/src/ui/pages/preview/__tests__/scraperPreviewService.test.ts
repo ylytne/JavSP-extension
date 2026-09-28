@@ -17,9 +17,6 @@ const mockCrawlerConfig: CrawlerRuntimeConfig = {
   extraFanartsMaxCount: 10,
   extraFanartsUniformSampling: true,
   extraFanartsTimeout: 5,
-  actressAvatarEnabled: false,
-  actressAvatarInterval: 0,
-  actressAvatarTimeout: 5,
   includeTrailer: false,
   crawlers: ["javbus", "javdb", "airav"],
   useJavdbCover: "fallback",
@@ -99,7 +96,6 @@ describe("scraperPreviewService 刮削测试流水线单元测试", () => {
               poster_filename: "poster.jpg",
               fanart_filename: "fanart.jpg",
               extrafanarts_files: ["extrafanart/0.jpg"],
-              actor_avatar_files: [".actors/相沢みなみ.jpg"],
               cleaned_dict: {
                 num: "IPX-177",
                 title: "纯情美少女的放学后",
@@ -238,7 +234,6 @@ describe("scraperPreviewService 刮削测试流水线单元测试", () => {
               poster_filename: "poster.jpg",
               fanart_filename: "fanart.jpg",
               extrafanarts_files: [],
-              actor_avatar_files: [],
               cleaned_dict: {},
             }),
           });

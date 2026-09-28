@@ -51,7 +51,6 @@ export interface SummarizerNfoConfig {
   title_pattern: string;
   custom_genres_fields: string[];
   custom_tags_fields: string[];
-  actress_thumb_mode?: "none" | "local";
   include_trailer?: boolean;
   clean_plot?: boolean;
   clean_plot_num?: boolean;
@@ -83,12 +82,6 @@ export interface SummarizerExtraFanartsConfig {
   uniform_sampling: boolean;
 }
 
-export interface SummarizerActressAvatarConfig {
-  enabled: boolean;
-  scrap_interval: number | string;
-  timeout: number;
-}
-
 export interface SummarizerSubtitleConfig {
   enabled: boolean;
   auto_c_suffix?: boolean;
@@ -105,7 +98,6 @@ export interface SummarizerConfig {
   cover: SummarizerCoverConfig;
   fanart: SummarizerFanartConfig;
   extra_fanarts: SummarizerExtraFanartsConfig;
-  actress_avatar?: SummarizerActressAvatarConfig;
   subtitle?: SummarizerSubtitleConfig;
 }
 

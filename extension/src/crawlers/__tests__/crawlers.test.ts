@@ -66,10 +66,6 @@ describe("JavBusCrawler", () => {
     expect(result.genre).toEqual(["温泉", "无码破解"]);
     expect(result.genre_id).toEqual(["v", "uncensored-x"]);
     expect(result.actress).toEqual(["相沢みなみ", "未知女优"]);
-    // nowprinting.gif should be excluded from actress_pics
-    expect(result.actress_pics).toEqual({
-      相沢みなみ: "https://pics.dmm.co.jp/mono/actjpgs/aizawa_minami.jpg",
-    });
     expect(result.preview_pics).toEqual([
       "https://pics.dmm.co.jp/digital/video/ipx00177/ipx00177-1.jpg",
     ]);

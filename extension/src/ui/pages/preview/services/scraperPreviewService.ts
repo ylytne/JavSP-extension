@@ -337,7 +337,6 @@ export async function executeScrapePreview(
     posterFilename: rawLanding.poster_filename,
     fanartFilename: rawLanding.fanart_filename,
     extrafanartsFiles: rawLanding.extrafanarts_files || [],
-    actorAvatarFiles: rawLanding.actor_avatar_files || [],
     cleanedDict: rawLanding.cleaned_dict || {},
     croppedPosterBase64: rawLanding.cropped_poster_base64,
     genreNorm: rawLanding.genre_norm || [],

@@ -183,66 +183,6 @@ export async function downloadExtraFanarts(
 }
 
 /**
- * 女优头像批量下载
- */
-export async function downloadActressAvatars(
-  actressPics: Record<string, string>,
-  dvdid: string,
-  crawlerConfig: CrawlerRuntimeConfig,
-  addLog: (level: LogEntry["level"], message: string) => void
-): Promise<Record<string, string>> {
-  const actressPicsBase64: Record<string, string> = {};
-  const actressEntries = Object.entries(actressPics);
-  addLog(
-    "step",
-    `[${dvdid}] 准备下载女优本地头像 (计划下载 ${actressEntries.length} 位)...`
-  );
-
-  const avatarRetryConfig: RequestRetryConfig = {
-    maxRetries: 1,
-    timeoutMs: (crawlerConfig.actressAvatarTimeout || 8) * 1000,
-    baseDelayMs: 1000,
-    onRetry: (attempt, max, reason) => {
-      addLog(
-        "warn",
-        `[${dvdid}] 女优头像下载遇到网络抖动 (${reason})，正在快速重试 (${attempt}/${max})...`
-      );
-    },
-  };
-
-  for (let aIdx = 0; aIdx < actressEntries.length; aIdx++) {
-    const [actName, actUrl] = actressEntries[aIdx];
-    if (!actUrl) continue;
-    try {
-      const aB64 = await BaseCrawler.fetchImageAsBase64(actUrl, avatarRetryConfig);
-      actressPicsBase64[actName] = aB64;
-      addLog(
-        "step",
-        `[${dvdid}] 女优头像下载成功: ${actName} (${aIdx + 1}/${actressEntries.length})`
-      );
-    } catch (aErr: any) {
-      addLog(
-        "warn",
-        `[${dvdid}] 女优头像 (${actName}) 下载跳过: ${aErr?.message || aErr}`
-      );
-    }
-
-    if (crawlerConfig.actressAvatarInterval > 0 && aIdx < actressEntries.length - 1) {
-      await new Promise((r) =>
-        setTimeout(r, crawlerConfig.actressAvatarInterval * 1000)
-      );
-    }
-  }
-
-  addLog(
-    "info",
-    `[${dvdid}] 女优头像下载完成，成功下载 ${Object.keys(actressPicsBase64).length}/${actressEntries.length} 位`
-  );
-
-  return actressPicsBase64;
-}
-
-/**
  * 单部影片刮削与多媒体处理主流水线
  */
 export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise<void> {
@@ -457,22 +397,7 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
     );
   }
 
-  // 阶段 7: 女优头像本地下载
-  let actressPicsBase64: Record<string, string> = {};
-  if (
-    crawlerConfig.actressAvatarEnabled &&
-    summarized.actress_pics &&
-    Object.keys(summarized.actress_pics).length > 0
-  ) {
-    actressPicsBase64 = await downloadActressAvatars(
-      summarized.actress_pics,
-      item.dvdid,
-      crawlerConfig,
-      addLog
-    );
-  }
-
-  // 阶段 8: 提交后端落盘整理
+  // 阶段 7: 提交后端落盘整理
   addLog("step", `[${item.dvdid}] 正在提交至本地后端整理落盘...`);
   wsService.submitOrganization(item.taskId, summarized, coverBase64, {
     files: item.files,
@@ -480,6 +405,5 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
     uncensored: item.uncensored,
     baseOutputDir: scanDir.trim() || undefined,
     extraFanartsBase64,
-    actressPicsBase64,
   });
 }
