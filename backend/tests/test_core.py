@@ -138,6 +138,27 @@ def test_nfo_generation(tmp_path: Path):
     xml_trailer = generate_nfo_content(info, config=cfg_trailer)
     assert "<trailer>https://example.com/preview.m3u8</trailer>" in xml_trailer
 
+    # 系列元数据验证：默认开启 serial_as_tag_and_genre 时同时写入 <set>、<genre> 和 <tag>
+    assert "<set>" in xml_str
+    assert "<name>相思相愛</name>" in xml_str
+    assert "<genre>相思相愛</genre>" in xml_str
+    assert "<tag>相思相愛</tag>" in xml_str
+
+    # 验证显式关闭 serial_as_tag_and_genre 时仅写入 <set>，不污染 <genre> 与 <tag>
+    cfg_no_serial_tag = get_config().model_copy(deep=True)
+    cfg_no_serial_tag.summarizer.nfo.serial_as_tag_and_genre = False
+    xml_no_serial_tag = generate_nfo_content(info, config=cfg_no_serial_tag)
+    assert "<set>" in xml_no_serial_tag
+    assert "<name>相思相愛</name>" in xml_no_serial_tag
+    assert "<genre>相思相愛</genre>" not in xml_no_serial_tag
+    assert "<tag>相思相愛</tag>" not in xml_no_serial_tag
+
+    # 验证当 serial 为占位符（如 #未知系列）时，不向 <genre> 和 <tag> 写入脏数据
+    info_placeholder = info.model_copy(update={"serial": "#未知系列"})
+    xml_placeholder = generate_nfo_content(info_placeholder)
+    assert "<genre>#未知系列</genre>" not in xml_placeholder
+    assert "<tag>#未知系列</tag>" not in xml_placeholder
+
     nfo_file = tmp_path / "movie.nfo"
     written = write_nfo(info, nfo_file)
     assert Path(written).exists()

@@ -102,6 +102,7 @@ class SummarizerNfoConfig(BaseModel):
     title_pattern: str = "{num} {title}"
     custom_genres_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])
     custom_tags_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])
+    serial_as_tag_and_genre: bool = True
     include_trailer: bool = False
     clean_plot: bool = True
     clean_plot_num: bool = True

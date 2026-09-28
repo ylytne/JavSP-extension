@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Trash2, HelpCircle, FileText, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, HelpCircle, FileText, AlertTriangle, BookmarkCheck } from "lucide-react";
 import { FullAppConfig } from "../types";
 import {
   NFO_TITLE_VARS,
@@ -171,7 +171,38 @@ export const NfoTab: React.FC<NfoTabProps> = ({ formConfig, updateForm }) => {
         </div>
       </div>
 
-      {/* 2. 剧情简介 (Plot) 脏数据清理设置卡片 */}
+      {/* 3. 系列元数据写入设置 (serial_as_tag_and_genre) */}
+      <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookmarkCheck size={16} className="text-indigo-600" />
+            <span className="text-xs font-bold text-slate-800">
+              系列 (Serial) 标签与分类写入
+            </span>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+            <input
+              type="checkbox"
+              data-testid="serial-as-tag-and-genre-checkbox"
+              checked={formConfig.summarizer.nfo.serial_as_tag_and_genre ?? true}
+              onChange={(e) =>
+                updateForm((cfg) => {
+                  cfg.summarizer.nfo.serial_as_tag_and_genre = e.target.checked;
+                  return cfg;
+                })
+              }
+              className="rounded text-indigo-600 focus:ring-indigo-500"
+            />
+            <span>添加系列至 &lt;tag&gt; 与 &lt;genre&gt;</span>
+          </label>
+        </div>
+        <p className="text-[11px] text-slate-500 leading-snug">
+          默认情况下，抓取到的影片“系列”（前端解析对应 <code className="text-slate-600 font-mono">serial</code>）会写入 NFO 的 <code className="text-indigo-600 font-mono">&lt;set&gt;</code> 集合节点中。
+          开启此选项后，还将自动把系列名称同时添加为 NFO 的 <code className="text-indigo-600 font-mono">&lt;tag&gt;</code> 标签与 <code className="text-indigo-600 font-mono">&lt;genre&gt;</code> 流派分类，方便在 Jellyfin、Emby、Kodi 等媒体库中直接按系列筛选和检索影片。
+        </p>
+      </div>
+
+      {/* 4. 剧情简介 (Plot) 脏数据清理设置卡片 */}
       <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

@@ -267,14 +267,43 @@ def test_dimension_routing_defaults_and_override(tmp_path: Path):
         }),
         encoding="utf-8",
     )
-    loaded = load_config(config_path=custom_yaml)
-    # 覆盖的字段
-    assert loaded.dimension_routing.actress == ["javdb", "javbus"]
-    assert loaded.dimension_routing.cover == ["airav", "javbus"]
-    # 未覆盖的字段无缝继承默认值
-    assert loaded.dimension_routing.previews == ["javbus", "javdb"]
-    assert loaded.dimension_routing.chinese == ["airav"]
-    assert loaded.dimension_routing.genre == ["javdb", "javbus", "airav"]
-    assert loaded.dimension_routing.meta == ["javbus", "javdb", "airav"]
+    try:
+        loaded = load_config(config_path=custom_yaml)
+        # 覆盖的字段
+        assert loaded.dimension_routing.actress == ["javdb", "javbus"]
+        assert loaded.dimension_routing.cover == ["airav", "javbus"]
+        # 未覆盖的字段无缝继承默认值
+        assert loaded.dimension_routing.previews == ["javbus", "javdb"]
+        assert loaded.dimension_routing.chinese == ["airav"]
+        assert loaded.dimension_routing.genre == ["javdb", "javbus", "airav"]
+        assert loaded.dimension_routing.meta == ["javbus", "javdb", "airav"]
+    finally:
+        load_config()
+
+
+def test_nfo_serial_as_tag_and_genre_config(tmp_path: Path):
+    """测试 NFO serial_as_tag_and_genre 配置项的默认值与用户覆盖合并。"""
+    default_cfg = get_default_config()
+    assert default_cfg.summarizer.nfo.serial_as_tag_and_genre is True
+
+    # 自定义覆盖为 False
+    custom_yaml = tmp_path / "config.yml"
+    custom_yaml.write_text(
+        yaml.dump({
+            "summarizer": {
+                "nfo": {
+                    "serial_as_tag_and_genre": False
+                }
+            }
+        }),
+        encoding="utf-8",
+    )
+    try:
+        loaded = load_config(config_path=custom_yaml)
+        assert loaded.summarizer.nfo.serial_as_tag_and_genre is False
+        # 其它字段无缝继承默认值
+        assert loaded.summarizer.nfo.clean_plot is True
+    finally:
+        load_config()
 
 

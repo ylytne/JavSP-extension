@@ -351,6 +351,35 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
     expect(currentConfig.summarizer.nfo.plot_clean_patterns).toEqual([]);
   });
 
+  it("NfoTab 应能正确展示并切换系列 (Serial) 标签与分类写入开关", async () => {
+    let currentConfig = JSON.parse(JSON.stringify(mockConfig));
+    const updateForm = vi.fn((updater) => {
+      currentConfig = updater(currentConfig);
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<NfoTab formConfig={currentConfig} updateForm={updateForm} />);
+    });
+
+    expect(container.textContent).toContain("系列 (Serial) 标签与分类写入");
+    expect(container.textContent).toContain("添加系列至 <tag> 与 <genre>");
+
+    // 找到 serial-as-tag-and-genre 复选框并点击切换
+    const serialCheckbox = container.querySelector(
+      "input[data-testid='serial-as-tag-and-genre-checkbox']"
+    ) as HTMLInputElement;
+    expect(serialCheckbox).not.toBeNull();
+    // 缺省时 fallback 至 true
+    expect(serialCheckbox.checked).toBe(true);
+
+    await act(async () => {
+      serialCheckbox.click();
+    });
+    expect(updateForm).toHaveBeenCalled();
+    expect(currentConfig.summarizer.nfo.serial_as_tag_and_genre).toBe(false);
+  });
+
   it("NetworkTab 应能展示各维度插槽优先级看板并支持顺位调序与重置", async () => {
     let currentConfig = JSON.parse(JSON.stringify(mockConfig));
     const updateForm = vi.fn((updater) => {

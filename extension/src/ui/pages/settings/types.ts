@@ -53,6 +53,7 @@ export interface SummarizerNfoConfig {
   title_pattern: string;
   custom_genres_fields: string[];
   custom_tags_fields: string[];
+  serial_as_tag_and_genre?: boolean;
   include_trailer?: boolean;
   clean_plot?: boolean;
   clean_plot_num?: boolean;

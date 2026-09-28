@@ -161,6 +161,17 @@ def generate_nfo_content(
                 if part_clean and part_clean not in genres:
                     genres.append(part_clean)
 
+    # 可选功能：将“系列”自动追加至 genre 分类 (默认开启)
+    if (
+        cfg.summarizer.nfo.serial_as_tag_and_genre
+        and info.serial
+        and info.serial.strip()
+        and not info.serial.strip().startswith("#")
+    ):
+        serial_clean = info.serial.strip()
+        if serial_clean not in genres:
+            genres.append(serial_clean)
+
     for g in genres:
         movie_elem.append(E.genre(g))
 
@@ -173,6 +184,17 @@ def generate_nfo_content(
                 part_clean = part.strip()
                 if part_clean and part_clean not in tags:
                     tags.append(part_clean)
+
+    # 可选功能：将“系列”自动追加至 tag 标签 (默认开启)
+    if (
+        cfg.summarizer.nfo.serial_as_tag_and_genre
+        and info.serial
+        and info.serial.strip()
+        and not info.serial.strip().startswith("#")
+    ):
+        serial_clean = info.serial.strip()
+        if serial_clean not in tags:
+            tags.append(serial_clean)
 
     for t in tags:
         movie_elem.append(E.tag(t))

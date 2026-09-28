@@ -110,6 +110,10 @@ summarizer:
     custom_tags_fields:
     - '{genre}'
     - '{censor}'
+    # 是否将影片“系列”同时写入 NFO 的 <tag> 标签与 <genre> 分类中 (默认开启):
+    # - true (默认开启): 自动将系列作为独立标签与流派分类写入，方便在 Jellyfin / Emby / Kodi 中按系列检索与聚合
+    # - false: 仅在 <set> 集合节点中记录系列，不额外写入 <tag> 与 <genre>
+    serial_as_tag_and_genre: true
     # 是否在 NFO 中写入预告视频链接 (<trailer>)：
     # - false (推荐默认): 不生成 <trailer> 标签。部分站点抓取的 m3u8 实为第三方在线切片流，极易失效/被墙，在 Jellyfin 影院模式下可能导致严重播放卡死
     # - true: 允许写入抓取到的预告视频链接 (仅在网络通畅且需要预告流时开启)
