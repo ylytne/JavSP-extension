@@ -174,6 +174,79 @@ describe("JavDBCrawler", () => {
     expect(result.score).toBe("9.00"); // 4.50 * 2
     expect(result.publish_date).toBe("2023-01-01");
   });
+
+  it("should extract metadata from JavDB proxy site with simplified Chinese and modern actor-female class", async () => {
+    const crawler = new JavDBCrawler("https://javdb580.com");
+
+    const searchHtml = `
+      <html>
+        <body>
+          <div class="movie-list">
+            <a class="box" href="/v/g6Adg" title="SSIS-335 温泉旅行 小宵こなん">
+              <div class="video-title"><strong>SSIS-335</strong></div>
+            </a>
+          </div>
+        </body>
+      </html>
+    `;
+    const searchDoc = new DOMParser().parseFromString(searchHtml, "text/html");
+
+    // 模拟真实代理镜像站（简体中文 + 现代 a.actor-female 标签）
+    const detailHtml = `
+      <html>
+        <body>
+          <div class="video-detail">
+            <h2><strong class="current-title">SSIS-335 温泉旅行 小宵こなん</strong></h2>
+            <img class="video-cover" src="https://c0.jdbstatic.com/covers/g6/g6Adg.jpg" />
+            <div class="score-stars"></div>
+            <span>4.26分</span>
+            <nav class="panel movie-panel-info">
+              <div class="panel-block"><strong>日期:</strong>&nbsp;<span class="value">2022-02-22</span></div>
+              <div class="panel-block"><strong>时长:</strong>&nbsp;<span class="value">120 分钟</span></div>
+              <div class="panel-block"><strong>导演:</strong>&nbsp;<span class="value"><a href="/directors/pWB">大崎広浩治</a></span></div>
+              <div class="panel-block"><strong>片商:</strong>&nbsp;<span class="value"><a href="/makers/7R">S1 NO.1 STYLE</a></span></div>
+              <div class="panel-block"><strong>系列:</strong>&nbsp;<span class="value"><a href="/series/Y80B">温泉不伦旅行</a></span></div>
+              <div class="panel-block">
+                <strong>类别:</strong>
+                &nbsp;<span class="value">
+                  <a href="/tags?c1=51">出轨</a>,&nbsp;
+                  <a href="/tags?c4=17">巨乳</a>,&nbsp;
+                  <a href="/tags/uncensored?c7=348">无码破解</a>
+                </span>
+              </div>
+              <div class="panel-block">
+                <strong>演员:</strong>
+                &nbsp;<span class="value">
+                  <a class="actor-female" href="/actors/76BeZ">小宵こなん</a>, <a href="/actors/p3NEk">井口</a>
+                </span>
+              </div>
+            </nav>
+          </div>
+        </body>
+      </html>
+    `;
+    const detailDoc = new DOMParser().parseFromString(detailHtml, "text/html");
+
+    vi.spyOn(crawler, "fetchDocument").mockImplementation(async (url: string) => {
+      if (url.includes("/search?")) return searchDoc;
+      return detailDoc;
+    });
+
+    const result = await crawler.scrape("SSIS-335");
+    expect(result.dvdid).toBe("SSIS-335");
+    expect(result.title).toBe("温泉旅行");
+    expect(result.publish_date).toBe("2022-02-22");
+    expect(result.duration).toBe("120");
+    expect(result.director).toBe("大崎広浩治");
+    expect(result.producer).toBe("S1 NO.1 STYLE");
+    expect(result.serial).toBe("温泉不伦旅行");
+    expect(result.uncensored).toBe(true);
+    // 类别与类别 ID 正常提取
+    expect(result.genre).toEqual(["出轨", "巨乳", "无码破解"]);
+    expect(result.genre_id).toEqual(["tags?c1=51", "tags?c4=17", "uncensored?c7=348"]);
+    // 现代 actor-female 精准提取女优，过滤男优 井口
+    expect(result.actress).toEqual(["小宵こなん"]);
+  });
 });
 
 describe("BaseCrawler.fetchImageAsBase64", () => {

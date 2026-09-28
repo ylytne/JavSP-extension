@@ -299,3 +299,54 @@ def test_organize_movie_auto_c_suffix_enabled_and_disabled(tmp_path: Path, monke
     p_out2 = Path(out2)
     assert (p_out2 / "IPX-888.mp4").is_file()
     assert (p_out2 / "IPX-888.srt").is_file()
+
+
+def test_organize_movie_multi_cd_duplicate_shared_subtitle(tmp_path: Path):
+    """测试多分片视频遇到重名防覆盖整理时，多分片文件、共享总字幕与 NFO 均能带 _1，旧文件完整保留。"""
+    out_dir = tmp_path / "out_multi_dup"
+
+    # 第一批次
+    src1 = tmp_path / "src1"
+    src1.mkdir()
+    cd1_1 = src1 / "IPX-222-cd1.mp4"
+    cd1_2 = src1 / "IPX-222-cd2.mp4"
+    cd1_1.write_bytes(b"cd1-v1")
+    cd1_2.write_bytes(b"cd2-v1")
+    sub1 = src1 / "IPX-222.srt"
+    sub1.write_text("sub-v1", encoding="utf-8")
+
+    meta1 = MovieInfo(dvdid="IPX-222", title="多分片影片", actress=["相沢みなみ"], plot="分片1简介")
+    res1 = organize_movie(files=[str(cd1_1), str(cd1_2)], metadata=meta1, base_output_dir=out_dir)
+    p = Path(res1)
+    assert (p / "IPX-222-CD1.mp4").read_bytes() == b"cd1-v1"
+    assert (p / "IPX-222-CD2.mp4").read_bytes() == b"cd2-v1"
+    assert (p / "IPX-222.srt").read_text(encoding="utf-8") == "sub-v1"
+    assert (p / "IPX-222.nfo").is_file()
+    assert "分片1简介" in (p / "IPX-222.nfo").read_text(encoding="utf-8")
+
+    # 第二批次重名整理
+    src2 = tmp_path / "src2"
+    src2.mkdir()
+    cd2_1 = src2 / "IPX-222-cd1.mp4"
+    cd2_2 = src2 / "IPX-222-cd2.mp4"
+    cd2_1.write_bytes(b"cd1-v2")
+    cd2_2.write_bytes(b"cd2-v2")
+    sub2 = src2 / "IPX-222.srt"
+    sub2.write_text("sub-v2", encoding="utf-8")
+
+    meta2 = MovieInfo(dvdid="IPX-222", title="多分片影片", actress=["相沢みなみ"], plot="分片2简介")
+    organize_movie(files=[str(cd2_1), str(cd2_2)], metadata=meta2, base_output_dir=out_dir)
+
+    # 验证第一批次未被覆盖
+    assert (p / "IPX-222-CD1.mp4").read_bytes() == b"cd1-v1"
+    assert (p / "IPX-222-CD2.mp4").read_bytes() == b"cd2-v1"
+    assert (p / "IPX-222.srt").read_text(encoding="utf-8") == "sub-v1"
+    assert "分片1简介" in (p / "IPX-222.nfo").read_text(encoding="utf-8")
+
+    # 验证第二批次全部自增生成 _1
+    assert (p / "IPX-222-CD1_1.mp4").read_bytes() == b"cd1-v2"
+    assert (p / "IPX-222-CD2_1.mp4").read_bytes() == b"cd2-v2"
+    assert (p / "IPX-222_1.srt").read_text(encoding="utf-8") == "sub-v2"
+    assert (p / "IPX-222_1.nfo").is_file()
+    assert "分片2简介" in (p / "IPX-222_1.nfo").read_text(encoding="utf-8")
+

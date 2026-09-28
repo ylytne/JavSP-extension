@@ -623,3 +623,125 @@ def test_generate_nfo_content_with_plot_cleaning():
     assert "airav.io" not in xml_str
 
 
+def test_organize_movie_duplicate_collision_creates_new_nfo(tmp_path: Path):
+    """测试当目标目录已存在同名影片时，新视频自增重命名为 _1.mp4 且同步生成 _1.nfo，旧 NFO 不被覆盖。"""
+    out_dir = tmp_path / "organized"
+
+    # 第一批次：整理 IPX-177
+    in_dir1 = tmp_path / "in1"
+    in_dir1.mkdir()
+    f1 = in_dir1 / "IPX-177.mp4"
+    f1.write_bytes(b"batch 1 video content")
+    s1 = in_dir1 / "IPX-177.srt"
+    s1.write_text("batch 1 subtitle", encoding="utf-8")
+
+    meta1 = MovieInfo(
+        dvdid="IPX-177",
+        title="纯情女友",
+        actress=["相沢みなみ"],
+        plot="第一批次的剧情简介",
+    )
+    res_dir1 = organize_movie(
+        files=[str(f1)],
+        metadata=meta1,
+        base_output_dir=out_dir,
+    )
+    p1 = Path(res_dir1)
+    assert (p1 / "IPX-177.mp4").is_file()
+    assert (p1 / "IPX-177.nfo").is_file()
+    assert (p1 / "IPX-177.srt").is_file()
+    nfo1_content = (p1 / "IPX-177.nfo").read_text(encoding="utf-8")
+    assert "第一批次的剧情简介" in nfo1_content
+
+    # 第二批次：重复下载同一番号视频，元数据标题完全相同，整理到同一个目标目录
+    in_dir2 = tmp_path / "in2"
+    in_dir2.mkdir()
+    f2 = in_dir2 / "IPX-177.mp4"
+    f2.write_bytes(b"batch 2 video content")
+    s2 = in_dir2 / "IPX-177.srt"
+    s2.write_text("batch 2 subtitle", encoding="utf-8")
+
+    meta2 = MovieInfo(
+        dvdid="IPX-177",
+        title="纯情女友",
+        actress=["相沢みなみ"],
+        plot="第二批次的剧情简介",
+    )
+    res_dir2 = organize_movie(
+        files=[str(f2)],
+        metadata=meta2,
+        base_output_dir=out_dir,
+    )
+    p2 = Path(res_dir2)
+    assert p1 == p2
+
+    # 验证新视频与字幕生成了 _1
+    assert (p2 / "IPX-177_1.mp4").is_file()
+    assert (p2 / "IPX-177_1.srt").is_file()
+    assert (p2 / "IPX-177_1.mp4").read_bytes() == b"batch 2 video content"
+
+    # 关键验证：自动同步生成了 IPX-177_1.nfo！
+    assert (p2 / "IPX-177_1.nfo").is_file()
+    nfo2_content = (p2 / "IPX-177_1.nfo").read_text(encoding="utf-8")
+    assert "第二批次的剧情简介" in nfo2_content
+
+    # 关键验证：原第一批次的 IPX-177.mp4 与 IPX-177.nfo 完好保留，绝未被覆盖！
+    assert (p2 / "IPX-177.mp4").is_file()
+    assert (p2 / "IPX-177.mp4").read_bytes() == b"batch 1 video content"
+    assert (p2 / "IPX-177.nfo").read_text(encoding="utf-8") == nfo1_content
+
+    # 第三批次：再次重复整理，自增至 _2
+    in_dir3 = tmp_path / "in3"
+    in_dir3.mkdir()
+    f3 = in_dir3 / "IPX-177.mp4"
+    f3.write_bytes(b"batch 3 video content")
+
+    meta3 = MovieInfo(
+        dvdid="IPX-177",
+        title="纯情女友",
+        actress=["相沢みなみ"],
+        plot="第三批次的剧情简介",
+    )
+    organize_movie(
+        files=[str(f3)],
+        metadata=meta3,
+        base_output_dir=out_dir,
+    )
+    assert (p2 / "IPX-177_2.mp4").is_file()
+    assert (p2 / "IPX-177_2.nfo").is_file()
+    assert "第三批次的剧情简介" in (p2 / "IPX-177_2.nfo").read_text(encoding="utf-8")
+
+
+def test_organize_movie_duplicate_collision_with_custom_nfo_pattern(tmp_path: Path, monkeypatch):
+    """测试当 nfo.basename_pattern 为 '{num}' 或 'movie' 时，重名冲突也能自动追加 _1 避免覆盖原 NFO。"""
+    cfg = get_config()
+    monkeypatch.setattr(cfg.summarizer.nfo, "basename_pattern", "movie")
+
+    out_dir = tmp_path / "organized_movie_pattern"
+
+    # 第一批次
+    in_dir1 = tmp_path / "in1"
+    in_dir1.mkdir()
+    f1 = in_dir1 / "IPX-177.mp4"
+    f1.write_bytes(b"batch 1")
+    meta1 = MovieInfo(dvdid="IPX-177", title="同一部影片", actress=["相沢みなみ"], plot="版本1简介")
+    res1 = organize_movie(files=[str(f1)], metadata=meta1, base_output_dir=out_dir)
+    p = Path(res1)
+    assert (p / "movie.nfo").is_file()
+    assert "版本1简介" in (p / "movie.nfo").read_text(encoding="utf-8")
+
+    # 第二批次重名整理
+    in_dir2 = tmp_path / "in2"
+    in_dir2.mkdir()
+    f2 = in_dir2 / "IPX-177.mp4"
+    f2.write_bytes(b"batch 2")
+    meta2 = MovieInfo(dvdid="IPX-177", title="同一部影片", actress=["相沢みなみ"], plot="版本2简介")
+    organize_movie(files=[str(f2)], metadata=meta2, base_output_dir=out_dir)
+
+    assert (p / "IPX-177_1.mp4").is_file()
+    assert (p / "movie_1.nfo").is_file()
+    assert "版本2简介" in (p / "movie_1.nfo").read_text(encoding="utf-8")
+    assert "版本1简介" in (p / "movie.nfo").read_text(encoding="utf-8")
+
+
+

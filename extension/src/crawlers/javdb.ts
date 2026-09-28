@@ -87,6 +87,7 @@ export class JavDBCrawler extends BaseCrawler {
       score,
       publish_date: dateMatch ? dateMatch[0] : undefined,
       genre: [],
+      genre_id: [],
       actress: [],
       preview_pics: [],
     });
@@ -139,18 +140,21 @@ export class JavDBCrawler extends BaseCrawler {
         const valueSpan = item.querySelector("span");
         const valText = (valueSpan ? valueSpan.textContent : item.textContent) || "";
 
-        if (strongText.includes("日期:")) {
+        if (/(?:日期|released? date)[：:]/i.test(strongText)) {
           const m = valText.match(/\d{4}-\d{2}-\d{2}/);
           if (m) publishDate = m[0];
-        } else if (strongText.includes("時長:")) {
-          duration = valText.replace("時長:", "").replace("分鍾", "").replace("分钟", "").trim();
-        } else if (strongText.includes("導演:")) {
+        } else if (/(?:時長|时长|duration)[：:]/i.test(strongText)) {
+          duration = valText
+            .replace(/^(?:時長|时长|duration)[：:]\s*/i, "")
+            .replace(/(?:分鍾|分钟|mins?)/gi, "")
+            .trim();
+        } else if (/(?:導演|导演|director)[：:]/i.test(strongText)) {
           director = valueSpan?.textContent?.trim();
-        } else if (strongText.includes("片商:") || strongText.includes("賣家:")) {
+        } else if (/(?:片商|賣家|卖家|maker|producer|seller)[：:]/i.test(strongText)) {
           producer = valueSpan?.textContent?.trim();
-        } else if (strongText.includes("發行:")) {
+        } else if (/(?:發行|发行|publisher)[：:]/i.test(strongText)) {
           publisher = valueSpan?.textContent?.trim();
-        } else if (strongText.includes("系列:")) {
+        } else if (/(?:系列|series)[：:]/i.test(strongText)) {
           serial = valueSpan?.textContent?.trim();
         }
       }
@@ -159,16 +163,17 @@ export class JavDBCrawler extends BaseCrawler {
     // 评分转换 (5分制乘以 2 -> 10分制)
     let score: string | undefined;
     const scoreContainer = doc.querySelector(".score-stars")?.parentElement?.textContent || "";
-    const sMatch = scoreContainer.match(/([\d.]+)分/);
+    const sMatch = scoreContainer.match(/([\d.]+)\s*(?:分|points?)/i) || scoreContainer.match(/([\d.]+)分/);
     if (sMatch) {
       score = (parseFloat(sMatch[1]) * 2).toFixed(2);
     }
 
-    // 分类提取
+    // 分类提取 (兼容繁体“類別:”、简体“类别:”以及英文“Tags:”)
     const genres: string[] = [];
     const genreIds: string[] = [];
     doc.querySelectorAll("strong").forEach((st) => {
-      if (st.textContent?.includes("類別:")) {
+      const text = st.textContent?.trim() || "";
+      if (/(?:類別|类别|tags?|categories|genre)[：:]/i.test(text)) {
         const links = st.parentElement?.querySelectorAll("span a");
         links?.forEach((a) => {
           const gName = a.textContent?.trim();
@@ -182,19 +187,57 @@ export class JavDBCrawler extends BaseCrawler {
       }
     });
 
-    // 女优提取（按 ♀ 符号精准过滤）
+    // 女优提取 (兼容现代 JavDB 的 a.actor-female 结构与旧版 <strong>♀</strong> 标记)
     const actressList: string[] = [];
     doc.querySelectorAll("strong").forEach((st) => {
-      if (st.textContent?.includes("演員:")) {
+      const text = st.textContent?.trim() || "";
+      if (/(?:演員|演员|actors?|actress(?:es)?)[：:]/i.test(text)) {
         const actorSpan = st.parentElement?.querySelector("span");
         if (actorSpan) {
-          const links = Array.from(actorSpan.querySelectorAll("a"));
-          const strongs = Array.from(actorSpan.querySelectorAll("strong"));
-          for (let i = 0; i < links.length; i++) {
-            const actorName = links[i].textContent?.trim() || "";
-            const gender = strongs[i]?.textContent?.trim();
-            if (gender === "♀" && actorName) {
-              actressList.push(actorName);
+          // 1. 优先提取现代 JavDB 标记的女性演员 a.actor-female
+          const femaleLinks = Array.from(actorSpan.querySelectorAll("a.actor-female"));
+          if (femaleLinks.length > 0) {
+            femaleLinks.forEach((a) => {
+              const name = a.textContent?.trim();
+              if (name && !actressList.includes(name)) {
+                actressList.push(name);
+              }
+            });
+          } else {
+            // 2. 兼容旧版/测试 Mock: 根据 ♀ 符号精准过滤女优
+            const links = Array.from(actorSpan.querySelectorAll("a"));
+            const strongs = Array.from(actorSpan.querySelectorAll("strong"));
+            let foundBySymbol = false;
+
+            for (let i = 0; i < links.length; i++) {
+              const actorName = links[i].textContent?.trim() || "";
+              const gender = strongs[i]?.textContent?.trim();
+              const nextElText = links[i].nextElementSibling?.textContent?.trim();
+              const nextNodeText = links[i].nextSibling?.textContent?.trim() || "";
+
+              if (
+                (gender === "♀" || nextElText === "♀" || nextNodeText.includes("♀")) &&
+                actorName
+              ) {
+                if (!actressList.includes(actorName)) {
+                  actressList.push(actorName);
+                }
+                foundBySymbol = true;
+              }
+            }
+
+            // 3. 若无任何 ♀ 标识且无 actor-female，排除明确标为男性的链接后作为女优提取
+            if (!foundBySymbol && links.length > 0) {
+              links.forEach((a) => {
+                if (a.classList.contains("actor-male")) return;
+                const nextNodeText =
+                  a.nextElementSibling?.textContent || a.nextSibling?.textContent || "";
+                if (nextNodeText.includes("♂")) return;
+                const name = a.textContent?.trim();
+                if (name && !actressList.includes(name)) {
+                  actressList.push(name);
+                }
+              });
             }
           }
         }

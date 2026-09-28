@@ -289,6 +289,7 @@ def organize_movie(
 
     old_parents = set(Path(f).parent for f in files)
     processed_sub_srcs: set[Path] = set()
+    collision_counter: int | None = None
 
     for i, file_path_str in enumerate(files, start=1):
         src_path = Path(file_path_str).resolve()
@@ -311,6 +312,7 @@ def organize_movie(
                 dest_filename = f"{dest_base_stem}{ext}"
                 dest_path = target_dir / dest_filename
                 counter += 1
+            collision_counter = max(collision_counter or 0, counter - 1)
 
         if dest_path != src_path:
             if use_hardlink:
@@ -356,6 +358,8 @@ def organize_movie(
                         shutil.copy2(sub_src_resolved, sub_dest_path)
                     logger.info("已归档字幕: %s -> %s", sub_src_resolved.name, sub_dest_filename)
 
+    effective_base_name = f"{base_name}_{collision_counter}" if collision_counter is not None else base_name
+
     # 处理多分片视频可能存在的总字幕 (例如 IPX-111.srt 对应 IPX-111-cd1.mp4, IPX-111-cd2.mp4)
     if sub_enabled and len(files) > 1:
         clean_stems = list(dict.fromkeys(get_clean_movie_stem(Path(f).stem) for f in files))
@@ -370,7 +374,7 @@ def organize_movie(
                 processed_sub_srcs.add(sub_src_resolved)
                 old_parents.add(sub_src_resolved.parent)
 
-                sub_dest_filename = f"{base_name}{remainder}"
+                sub_dest_filename = f"{effective_base_name}{remainder}"
                 sub_dest_path = target_dir / sub_dest_filename
 
                 if sub_dest_path != sub_src_resolved:
@@ -402,7 +406,6 @@ def organize_movie(
             except OSError:
                 pass
 
-    # 2. 生成并写入 NFO 文件
     # 2. 保存本地女优头像 (.actors/)
     saved_actors: list[str] = []
     if config.summarizer.actress_avatar.enabled and actress_pics_base64:
@@ -416,6 +419,11 @@ def organize_movie(
     if on_step:
         on_step("WRITING_NFO", "正在写入 NFO 文件")
 
+    # 若发生了防覆盖重命名，同步更新 cleaned_dict 中的 filename 与 basename
+    if collision_counter is not None:
+        cleaned_dict["filename"] = effective_base_name
+        cleaned_dict["basename"] = effective_base_name
+
     nfo_basename = config.summarizer.nfo.basename_pattern
     if not nfo_basename or not nfo_basename.strip():
         nfo_basename = "{filename}"
@@ -423,6 +431,14 @@ def organize_movie(
         nfo_filename = f"{replace_illegal_chars(nfo_basename.format_map(SafeDict(cleaned_dict)))}.nfo"
     else:
         nfo_filename = f"{nfo_basename}.nfo"
+
+    # 若发生防覆盖冲突，确保 NFO 文件名也带有冲突后缀，绝不覆盖已有旧 NFO，并同步生成新独立 NFO
+    if collision_counter is not None:
+        collision_suffix = f"_{collision_counter}"
+        nfo_stem = Path(nfo_filename).stem
+        if not nfo_stem.endswith(collision_suffix):
+            nfo_filename = f"{nfo_stem}{collision_suffix}.nfo"
+        logger.info("检测到视频重名防覆盖整理，已同步生成独立 NFO: %s", nfo_filename)
 
     nfo_path = target_dir / nfo_filename
     write_nfo(metadata, nfo_path, config=config, local_actors=saved_actors)
