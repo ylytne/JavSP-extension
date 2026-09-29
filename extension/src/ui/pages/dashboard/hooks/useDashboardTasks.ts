@@ -4,7 +4,7 @@ import { wsService } from "../../../../services/backend-ws";
 import { serverConfig } from "../../../../services/serverConfig";
 import { TranslatorConfig } from "../../../../translators";
 import { LogEntry } from "../../../components/LogDrawer";
-import { CrawlerRuntimeConfig, ScanProgress, StatusFilter, getCrawlerSiteInfo } from "../types";
+import { CrawlerRuntimeConfig, ScanProgress, StatusFilter, getCrawlerSiteInfo, OrganizeMode } from "../types";
 import { executeScrapePipeline } from "../services/scraperPipeline";
 import {
   ResidentTabManager,
@@ -19,6 +19,8 @@ import {
 
 export interface UseDashboardTasksOptions {
   scanDir: string;
+  outputDir?: string;
+  organizeMode?: OrganizeMode;
   crawlerConfig: CrawlerRuntimeConfig;
   translatorConfig: TranslatorConfig | null;
   addLog: (level: LogEntry["level"], message: string) => void;
@@ -27,6 +29,8 @@ export interface UseDashboardTasksOptions {
 
 export function useDashboardTasks({
   scanDir,
+  outputDir,
+  organizeMode,
   crawlerConfig,
   translatorConfig,
   addLog,
@@ -169,11 +173,13 @@ export function useDashboardTasks({
         crawlerConfig,
         translatorConfig,
         scanDir,
+        outputDir,
+        organizeMode,
         addLog,
         onUpdateTask: updateCurrentTask,
       });
     },
-    [crawlerConfig, translatorConfig, scanDir, addLog]
+    [crawlerConfig, translatorConfig, scanDir, outputDir, organizeMode, addLog]
   );
 
   // 单部影片抓取触发（前置站点就绪感知）

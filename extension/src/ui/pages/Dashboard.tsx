@@ -26,6 +26,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setIsServerModalOpen,
     scanDir,
     setScanDir,
+    outputDir,
+    setOutputDir,
+    organizeMode,
+    setOrganizeMode,
+    saveOrganizeSettings,
     crawlerConfig,
     translatorConfig,
   } = useDashboardConfig(addLog);
@@ -53,6 +58,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     handleCloseReadinessModal,
   } = useDashboardTasks({
     scanDir,
+    outputDir,
+    organizeMode,
     crawlerConfig,
     translatorConfig,
     addLog,
@@ -74,11 +81,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <ScanSection
           scanDir={scanDir}
           onChangeScanDir={setScanDir}
+          outputDir={outputDir}
+          onChangeOutputDir={(newOut) => {
+            setOutputDir(newOut);
+            saveOrganizeSettings(organizeMode, newOut);
+          }}
+          organizeMode={organizeMode}
+          onChangeOrganizeMode={(newMode) => {
+            setOrganizeMode(newMode);
+            saveOrganizeSettings(newMode, outputDir);
+          }}
           onStartScan={handleStartScan}
           isScanning={isScanning}
           wsConnected={wsState === "connected"}
           scanProgress={scanProgress}
           onNavigatePreview={onNavigateTab ? () => onNavigateTab("preview") : undefined}
+          onNavigateSettings={onNavigateTab ? () => onNavigateTab("settings") : undefined}
         />
         <CrawlerStatusNotice
           crawlers={crawlerConfig.crawlers}

@@ -92,7 +92,7 @@ describe("LocalManagement 本地管理与 NfoCleanerTab 测试", () => {
     expect(container.textContent).toContain("本地文件管理");
     expect(container.textContent).toContain("NFO 标签清理");
     expect(container.textContent).toContain("海报批量重裁剪");
-    expect(container.textContent).toContain("NFO 标签清理工具");
+    expect(container.textContent).toContain("NFO 规则重写与清理工具");
 
     // 点击切换至海报批量重裁剪选项卡
     const recropTabBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
@@ -116,7 +116,7 @@ describe("LocalManagement 本地管理与 NfoCleanerTab 测试", () => {
     });
 
     const execBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
-      btn.textContent?.includes("开始执行清理")
+      btn.textContent?.includes("开始扫描并预览改动")
     );
     expect(execBtn).not.toBeNull();
 
@@ -146,7 +146,7 @@ describe("LocalManagement 本地管理与 NfoCleanerTab 测试", () => {
     expect(input.value).toBe("D:\\Videos\\Default");
   });
 
-  it("NfoCleanerTab 正常执行清理并展示统计结果", async () => {
+  it("NfoCleanerTab 正常执行扫描预览并展示统计结果", async () => {
     const root = createRoot(container);
     await act(async () => {
       root.render(<NfoCleanerTab wsState="connected" />);
@@ -160,38 +160,68 @@ describe("LocalManagement 本地管理与 NfoCleanerTab 测试", () => {
       fetchBtn?.click();
     });
 
-    const execBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
-      btn.textContent?.includes("开始执行清理")
+    const scanBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
+      btn.textContent?.includes("开始扫描并预览改动")
     );
 
     await act(async () => {
-      execBtn?.click();
+      scanBtn?.click();
     });
 
-
-    expect(container.textContent).toContain("处理结果汇总");
+    expect(container.textContent).toContain("模拟预览模式 (磁盘尚未修改)");
     expect(container.textContent).toContain("已扫描文件");
     expect(container.textContent).toContain("5");
-    expect(container.textContent).toContain("涉及修改文件");
+    expect(container.textContent).toContain("涉及变更文件");
     expect(container.textContent).toContain("2");
     expect(container.textContent).toContain("MIDV-404.nfo");
     expect(container.textContent).toContain("IPX-177.nfo");
   });
 
-  it("NfoCleanerTab 开启预览模式时按钮文案与状态应切换", async () => {
+  it("NfoCleanerTab 预览后点击真实写盘应弹出二次确认弹窗并执行成功", async () => {
     const root = createRoot(container);
     await act(async () => {
       root.render(<NfoCleanerTab wsState="connected" />);
     });
 
-    const dryRunCheckbox = Array.from(container.querySelectorAll("input[type='checkbox']"))[3] as HTMLInputElement;
-    expect(dryRunCheckbox).not.toBeNull();
-
+    const fetchBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
+      btn.textContent?.includes("读取系统输入目录")
+    );
     await act(async () => {
-      dryRunCheckbox.click();
+      fetchBtn?.click();
     });
 
-    expect(container.textContent).toContain("开始预览扫描");
+    const scanBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
+      btn.textContent?.includes("开始扫描并预览改动")
+    );
+    await act(async () => {
+      scanBtn?.click();
+    });
+
+    expect(container.textContent).toContain("模拟预览模式 (磁盘尚未修改)");
+
+    // 点击确认写盘按钮
+    const applyBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
+      btn.textContent?.includes("确认无误，执行真实写盘")
+    );
+    expect(applyBtn).not.toBeNull();
+
+    await act(async () => {
+      applyBtn?.click();
+    });
+
+    // 应该弹出确认弹窗
+    expect(container.textContent).toContain("确认执行真实写盘？");
+    expect(container.textContent).toContain("确认立即写入磁盘");
+
+    // 点击确认立即写入磁盘
+    const confirmWriteBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
+      btn.textContent?.includes("确认立即写入磁盘")
+    );
+    await act(async () => {
+      confirmWriteBtn?.click();
+    });
+
+    expect(container.textContent).toContain("真实写入完成");
   });
 
   it("NfoCleanerTab 点击列表文件应按需打开双栏对比弹窗并展示修改前后内容", async () => {
@@ -208,11 +238,11 @@ describe("LocalManagement 本地管理与 NfoCleanerTab 测试", () => {
       fetchBtn?.click();
     });
 
-    const execBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
-      btn.textContent?.includes("开始执行清理")
+    const scanBtn = Array.from(container.querySelectorAll("button")).find((btn) =>
+      btn.textContent?.includes("开始扫描并预览改动")
     );
     await act(async () => {
-      execBtn?.click();
+      scanBtn?.click();
     });
 
     // 找到 MIDV-404.nfo 对应行

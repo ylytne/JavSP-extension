@@ -3,7 +3,7 @@ import { TranslatorConfig } from "../../../../translators";
 import { wsService } from "../../../../services/backend-ws";
 import { serverConfig } from "../../../../services/serverConfig";
 import { LogEntry } from "../../../components/LogDrawer";
-import { CrawlerRuntimeConfig } from "../types";
+import { CrawlerRuntimeConfig, OrganizeMode } from "../types";
 import { DEFAULT_DIMENSION_ROUTING } from "../../../../crawlers/dimensionSlots";
 import { ResidentTabManager } from "../../../../crawlers/tabBridge";
 
@@ -32,6 +32,8 @@ const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
 
 export function useDashboardConfig(addLog: (level: LogEntry["level"], message: string) => void) {
   const [scanDir, setScanDir] = useState<string>("");
+  const [outputDir, setOutputDir] = useState<string>("");
+  const [organizeMode, setOrganizeMode] = useState<OrganizeMode>("move");
   const [serverAddress, setServerAddress] = useState<string>(serverConfig.getCurrentServerAddress());
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
 
@@ -47,6 +49,19 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
     const inputDir = cfg.scanner?.input_directory ?? cfg.input_directory;
     if (inputDir) {
       setScanDir(inputDir);
+    }
+    const outDir = cfg.summarizer?.path?.output_directory ?? "";
+    if (outDir) {
+      setOutputDir(outDir);
+    }
+    const moveFiles = cfg.summarizer?.move_files !== false && cfg.move_files !== false;
+    const hardLink = !!(cfg.summarizer?.path?.hard_link || cfg.hard_link);
+    if (hardLink) {
+      setOrganizeMode("hard_link");
+    } else if (!moveFiles) {
+      setOrganizeMode("inplace");
+    } else {
+      setOrganizeMode("move");
     }
     if (cfg.translator) {
       setTranslatorConfig(cfg.translator);
@@ -153,6 +168,51 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
     };
   }, [applyConfig, addLog]);
 
+  // 同步输出目录与整理模式至后端持久化配置
+  const saveOrganizeSettings = useCallback(
+    async (newMode: OrganizeMode, newOutputDir: string) => {
+      try {
+        const baseUrl = serverConfig.getHttpBaseUrl();
+        const authHeaders = serverConfig.getAuthHeaders();
+        const currentResp = await fetch(`${baseUrl}/api/config`, { headers: authHeaders });
+        if (!currentResp.ok) return;
+        const cfg = await currentResp.json();
+
+        if (!cfg.summarizer) cfg.summarizer = {};
+        if (!cfg.summarizer.path) cfg.summarizer.path = {};
+
+        cfg.summarizer.path.output_directory = newOutputDir.trim() || null;
+        if (newMode === "move") {
+          cfg.summarizer.move_files = true;
+          cfg.summarizer.path.hard_link = false;
+        } else if (newMode === "hard_link") {
+          cfg.summarizer.move_files = true;
+          cfg.summarizer.path.hard_link = true;
+        } else if (newMode === "inplace") {
+          cfg.summarizer.move_files = false;
+          cfg.summarizer.path.hard_link = false;
+        }
+
+        const putResp = await fetch(`${baseUrl}/api/config`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify(cfg),
+        });
+        if (putResp.ok) {
+          addLog(
+            "info",
+            `文件整理设置已热生效: 模式=${
+              newMode === "move" ? "移动归档" : newMode === "hard_link" ? "硬链接" : "原地生成"
+            }，输出目录=${newOutputDir.trim() || "同扫描目录"}`
+          );
+        }
+      } catch (e: any) {
+        console.warn("[JavSP] 同步整理设置失败:", e);
+      }
+    },
+    [addLog]
+  );
+
   return {
     serverAddress,
     setServerAddress,
@@ -160,6 +220,11 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
     setIsServerModalOpen,
     scanDir,
     setScanDir,
+    outputDir,
+    setOutputDir,
+    organizeMode,
+    setOrganizeMode,
+    saveOrganizeSettings,
     crawlerConfig,
     translatorConfig,
     applyConfig,

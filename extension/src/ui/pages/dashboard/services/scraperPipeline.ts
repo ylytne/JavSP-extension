@@ -8,13 +8,15 @@ import { TranslatorConfig, translateMovieInfo } from "../../../../translators";
 import { wsService } from "../../../../services/backend-ws";
 import { sampleEvenly } from "../../../../utils/sampling";
 import { LogEntry } from "../../../components/LogDrawer";
-import { CrawlerRuntimeConfig } from "../types";
+import { CrawlerRuntimeConfig, OrganizeMode } from "../types";
 
 export interface ScrapePipelineContext {
   item: ScanMovieItem;
   crawlerConfig: CrawlerRuntimeConfig;
   translatorConfig: TranslatorConfig | null;
   scanDir: string;
+  outputDir?: string;
+  organizeMode?: OrganizeMode;
   addLog: (level: LogEntry["level"], message: string) => void;
   onUpdateTask: (patch: Partial<ScanMovieItem>) => void;
 }
@@ -266,7 +268,16 @@ export async function downloadExtraFanarts(
  * 单部影片刮削与多媒体处理主流水线
  */
 export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise<void> {
-  const { item, crawlerConfig, translatorConfig, scanDir, addLog, onUpdateTask } = ctx;
+  const {
+    item,
+    crawlerConfig,
+    translatorConfig,
+    scanDir,
+    outputDir,
+    organizeMode,
+    addLog,
+    onUpdateTask,
+  } = ctx;
 
   if (!item.dvdid) {
     addLog("error", `[${item.taskId.slice(0, 8)}] 无法执行刮削：该视频文件未能推测出有效番号`);
@@ -489,11 +500,19 @@ export async function executeScrapePipeline(ctx: ScrapePipelineContext): Promise
 
   // 阶段 7: 提交后端落盘整理
   addLog("step", `[${item.dvdid}] 正在提交至本地后端整理落盘...`);
+  const currentMode = organizeMode || "move";
+  const effectiveOutputDir =
+    currentMode === "inplace"
+      ? undefined
+      : (outputDir?.trim() || scanDir.trim() || undefined);
+
   wsService.submitOrganization(item.taskId, summarized, coverBase64, {
     files: item.files,
     hardSub: item.hard_sub,
     uncensored: item.uncensored,
-    baseOutputDir: scanDir.trim() || undefined,
+    baseOutputDir: effectiveOutputDir,
+    moveFiles: currentMode !== "inplace",
+    hardLink: currentMode === "hard_link",
     extraFanartsBase64,
   });
 }

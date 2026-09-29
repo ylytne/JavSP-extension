@@ -80,6 +80,7 @@ dimension_routing:
 summarizer:
   move_files: true
   path:
+    output_directory: null
     output_folder_pattern: '#整理完成/{actress}/[{num}] {title}'
     basename_pattern: '{num}'
     length_maximum: 250

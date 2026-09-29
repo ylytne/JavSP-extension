@@ -81,6 +81,11 @@ describe("Dashboard 模块化重构后的组件与服务测试", () => {
 
     expect(container.textContent).not.toContain("未能连接到后端服务网关");
     expect(container.textContent).toContain("待整理视频文件夹路径");
+    expect(container.textContent).toContain("整理后输出根目录");
+    expect(container.textContent).toContain("文件整理模式");
+    expect(container.textContent).toContain("移动并归档");
+    expect(container.textContent).toContain("创建硬链接");
+    expect(container.textContent).toContain("原地就地生成");
     expect(container.textContent).toContain("扫描目录");
 
     // 默认空状态
@@ -93,7 +98,7 @@ describe("Dashboard 模块化重构后的组件与服务测试", () => {
     expect(container.textContent).toContain("AirAV");
   });
 
-  it("should allow editing the directory input", async () => {
+  it("should allow editing the directory input and output directory", async () => {
     const addLog = vi.fn();
     const root = createRoot(container);
 
@@ -101,10 +106,11 @@ describe("Dashboard 模块化重构后的组件与服务测试", () => {
       root.render(<Dashboard wsState="connected" addLog={addLog} />);
     });
 
-    const input = container.querySelector(
-      "input[type='text']"
-    ) as HTMLInputElement;
-    expect(input).not.toBeNull();
+    const inputs = container.querySelectorAll("input[type='text']") as NodeListOf<HTMLInputElement>;
+    expect(inputs.length).toBeGreaterThanOrEqual(2);
+
+    const scanInput = inputs[0];
+    const outputInput = inputs[1];
 
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -112,12 +118,44 @@ describe("Dashboard 模块化重构后的组件与服务测试", () => {
     )?.set;
 
     await act(async () => {
-      nativeInputValueSetter?.call(input, "D:/NewMovies");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+      nativeInputValueSetter?.call(scanInput, "D:/NewMovies");
+      scanInput.dispatchEvent(new Event("input", { bubbles: true }));
+      scanInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      nativeInputValueSetter?.call(outputInput, "E:/OrganizedMovies");
+      outputInput.dispatchEvent(new Event("input", { bubbles: true }));
+      outputInput.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    expect(input.value).toBe("D:/NewMovies");
+    expect(scanInput.value).toBe("D:/NewMovies");
+    expect(outputInput.value).toBe("E:/OrganizedMovies");
+  });
+
+  it("should allow toggling organize modes", async () => {
+    const addLog = vi.fn();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<Dashboard wsState="connected" addLog={addLog} />);
+    });
+
+    // 查找并点击“创建硬链接”
+    const hardLinkCard = container.querySelector('[data-testid="organize-mode-hard_link"]') as HTMLElement;
+    expect(hardLinkCard).not.toBeNull();
+
+    await act(async () => {
+      hardLinkCard.click();
+    });
+
+    // 点击“原地就地生成”
+    const inplaceCard = container.querySelector('[data-testid="organize-mode-inplace"]') as HTMLElement;
+    expect(inplaceCard).not.toBeNull();
+
+    await act(async () => {
+      inplaceCard.click();
+    });
+
+    expect(container.textContent).toContain("当前为原地生成模式");
   });
 
   it("useDashboardTasks 批量处理时当达到批次目标应触发大批量防爬冷却保护", async () => {
