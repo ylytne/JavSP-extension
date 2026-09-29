@@ -26,6 +26,7 @@ export interface CrawlerConfig {
 }
 
 export interface SummarizerPathConfig {
+  output_directory?: string | null;
   output_folder_pattern: string;
   basename_pattern: string;
   length_maximum: number;

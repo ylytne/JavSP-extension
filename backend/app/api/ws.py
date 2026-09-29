@@ -208,7 +208,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     if data.get("uncensored") is not None
                     else (task_item.uncensored if task_item else False)
                 )
-                base_out_dir = data.get("base_output_dir") or _last_scan_dir
+                base_out_dir = data.get("base_output_dir") or data.get("baseOutputDir") or _last_scan_dir
+                move_files_val = data.get("move_files") if data.get("move_files") is not None else data.get("moveFiles")
+                hard_link_val = data.get("hard_link") if data.get("hard_link") is not None else data.get("hardLink")
                 extra_fanarts_base64 = data.get("extra_fanarts_base64") or data.get("extraFanartsBase64") or []
 
                 if not files:
@@ -251,6 +253,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                             base_output_dir=base_out_dir,
                             hard_sub=hard_sub,
                             uncensored=uncensored,
+                            move_files=move_files_val,
+                            hard_link=hard_link_val,
                             on_step=on_step_callback,
                         )
 

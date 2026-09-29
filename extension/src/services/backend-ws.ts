@@ -225,6 +225,8 @@ export class BackendWsClient {
       hardSub?: boolean;
       uncensored?: boolean;
       baseOutputDir?: string;
+      moveFiles?: boolean;
+      hardLink?: boolean;
       extraFanartsBase64?: string[];
     }
   ): void {
@@ -239,6 +241,8 @@ export class BackendWsClient {
         hard_sub: extra?.hardSub,
         uncensored: extra?.uncensored,
         base_output_dir: extra?.baseOutputDir,
+        move_files: extra?.moveFiles,
+        hard_link: extra?.hardLink,
       },
       taskId
     );

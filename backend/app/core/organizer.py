@@ -178,6 +178,8 @@ def organize_movie(
     base_output_dir: str | Path | None = None,
     hard_sub: bool = False,
     uncensored: bool = False,
+    move_files: bool | None = None,
+    hard_link: bool | None = None,
     on_step: Callable[[str, str], None] | None = None,
 ) -> str:
     """执行单部影片的落盘整理：生成 NFO、保存裁剪海报、移动/硬链接视频文件与保存剧照。
@@ -187,9 +189,11 @@ def organize_movie(
         metadata: 刮削汇总后的 MovieInfo 结构。
         cover_base64: 可选的 Base64 封面图。
         extra_fanarts_base64: 可选的剧照 Base64 数据 URL 列表（由前端扩展下载并传输）。
-        base_output_dir: 基础输出目录，若为 None 则使用第一个视频文件的父目录或配置目录。
+        base_output_dir: 基础输出目录，若为 None 则使用配置目录或第一个视频文件的父目录。
         hard_sub: 是否有内嵌字幕。
         uncensored: 是否无码。
+        move_files: 可选的移动模式覆盖（None 时遵循后端配置）。
+        hard_link: 可选的硬链接模式覆盖（None 时遵循后端配置）。
         on_step: 进度回调 (step_name, message)。
 
     Returns:
@@ -199,11 +203,16 @@ def organize_movie(
     if not files:
         raise ValueError("没有关联的视频文件待整理")
 
+    should_move = move_files if move_files is not None else config.summarizer.move_files
+    use_hardlink = hard_link if hard_link is not None else config.summarizer.path.hard_link
+
     first_file = Path(files[0]).resolve()
-    if base_output_dir is None:
-        base_dir = first_file.parent
-    else:
+    if base_output_dir is not None and str(base_output_dir).strip():
         base_dir = Path(base_output_dir).resolve()
+    elif config.summarizer.path.output_directory and config.summarizer.path.output_directory.strip():
+        base_dir = Path(config.summarizer.path.output_directory.strip()).resolve()
+    else:
+        base_dir = first_file.parent
 
     # 标签分类清洗与规范化
     clean_movie_genres(metadata)
@@ -265,9 +274,12 @@ def organize_movie(
     cleaned_dict["title"] = truncated_title if (truncated_title is not None) else (cleaned_dict.get("title") or "")
 
     # 构造目标子文件夹路径
-    rel_folder = config.summarizer.path.output_folder_pattern.format_map(SafeDict(cleaned_dict))
-    target_dir = (base_dir / rel_folder).resolve()
-    target_dir.mkdir(parents=True, exist_ok=True)
+    if not should_move and not use_hardlink:
+        target_dir = first_file.parent
+    else:
+        rel_folder = config.summarizer.path.output_folder_pattern.format_map(SafeDict(cleaned_dict))
+        target_dir = (base_dir / rel_folder).resolve()
+        target_dir.mkdir(parents=True, exist_ok=True)
 
     # 构造基础文件名 (如 IPX-177 或 IPX-177-C)
     base_name = config.summarizer.path.basename_pattern.format_map(SafeDict(cleaned_dict))
@@ -281,9 +293,6 @@ def organize_movie(
             "ORGANIZING_FILES",
             "正在归档与移动视频及字幕文件" if sub_enabled else "正在归档与移动视频文件",
         )
-
-    should_move = config.summarizer.move_files
-    use_hardlink = config.summarizer.path.hard_link
 
     old_parents = set(Path(f).parent for f in files)
     processed_sub_srcs: set[Path] = set()
@@ -301,29 +310,32 @@ def organize_movie(
         dest_path = target_dir / dest_filename
 
         dest_base_stem = f"{base_name}{slice_suffix}"
-        # 防覆盖检查
-        if dest_path.exists() and dest_path != src_path:
-            # 追加数字后缀避免覆盖
-            counter = 1
-            while dest_path.exists():
-                dest_base_stem = f"{base_name}{slice_suffix}_{counter}"
-                dest_filename = f"{dest_base_stem}{ext}"
-                dest_path = target_dir / dest_filename
-                counter += 1
-            collision_counter = max(collision_counter or 0, counter - 1)
 
-        if dest_path != src_path:
-            if use_hardlink:
-                try:
-                    os.link(src_path, dest_path)
-                except OSError as e:
-                    logger.warning("创建硬链接失败 (%s)，回退至文件复制", e)
-                    shutil.copy2(src_path, dest_path)
-            elif should_move:
-                shutil.move(src_path, dest_path)
-            else:
-                # 既不移动也不硬链，仅复制或就地保留
-                shutil.copy2(src_path, dest_path)
+        if not should_move and not use_hardlink:
+            # 原地生成模式：保留原视频文件位置，不移动、不复制
+            dest_path = src_path
+            dest_base_stem = src_path.stem
+        else:
+            # 防覆盖检查
+            if dest_path.exists() and dest_path != src_path:
+                # 追加数字后缀避免覆盖
+                counter = 1
+                while dest_path.exists():
+                    dest_base_stem = f"{base_name}{slice_suffix}_{counter}"
+                    dest_filename = f"{dest_base_stem}{ext}"
+                    dest_path = target_dir / dest_filename
+                    counter += 1
+                collision_counter = max(collision_counter or 0, counter - 1)
+
+            if dest_path != src_path:
+                if use_hardlink:
+                    try:
+                        os.link(src_path, dest_path)
+                    except OSError as e:
+                        logger.warning("创建硬链接失败 (%s)，回退至文件复制", e)
+                        shutil.copy2(src_path, dest_path)
+                elif should_move:
+                    shutil.move(src_path, dest_path)
 
         # 归档该视频文件关联的字幕文件
         if sub_enabled:
@@ -630,6 +642,8 @@ def simulate_movie_organization(
 
     if base_output_dir:
         base_dir = Path(base_output_dir)
+    elif cfg.summarizer.path.output_directory and cfg.summarizer.path.output_directory.strip():
+        base_dir = Path(cfg.summarizer.path.output_directory.strip())
     elif cfg.scanner.input_directory:
         base_dir = Path(cfg.scanner.input_directory)
     else:

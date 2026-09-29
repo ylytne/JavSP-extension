@@ -26,6 +26,8 @@ export interface CrawlerRuntimeConfig {
 
 export type StatusFilter = "all" | "pending" | "completed" | "error";
 
+export type OrganizeMode = "move" | "hard_link" | "inplace";
+
 export interface ScanProgress {
   current: number;
   scanned_files: number;

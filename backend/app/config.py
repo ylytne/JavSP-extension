@@ -73,6 +73,7 @@ class ScannerConfig(BaseModel):
 
 class SummarizerPathConfig(BaseModel):
     """路径整理相关配置。"""
+    output_directory: str | None = None
     output_folder_pattern: str = "#整理完成/{actress}/[{num}] {title}"
     basename_pattern: str = "{num}"
     length_maximum: int = 250

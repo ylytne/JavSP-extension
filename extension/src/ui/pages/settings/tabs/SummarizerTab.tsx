@@ -32,9 +32,12 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
     <div className="space-y-5">
       {/* 整理模式卡片 */}
       <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-          文件整理模式
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="block text-xs font-bold text-slate-700">
+            文件整理模式
+          </label>
+          <span className="text-[11px] text-slate-400">已与【刮削管理】首页控制台双向联动</span>
+        </div>
         <div className="grid grid-cols-3 gap-3">
           {[
             {
@@ -88,21 +91,47 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
 
       {/* 输出路径模板与文件名配置卡片 */}
       <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-4">
+        {/* 默认输出根目录 */}
+        <div className="space-y-1.5 pb-3 border-b border-slate-200/70">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div>
+              <label className="text-xs font-bold text-slate-700">
+                默认整理后输出根目录 (output_directory)
+              </label>
+              <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
+                跨盘归档或统一影片存放根目录。留空则默认直接输出至每次扫描的待整理目录，亦可在【刮削管理】面板中随时手动指定。
+              </p>
+            </div>
+          </div>
+          <input
+            type="text"
+            value={formConfig.summarizer.path.output_directory || ""}
+            onChange={(e) =>
+              updateForm((cfg) => {
+                cfg.summarizer.path.output_directory = e.target.value.trim() || null;
+                return cfg;
+              })
+            }
+            placeholder="例如: E:\Movies\Organized 或 /volume1/video/movies (留空默认使用扫描目录)"
+            className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
         {/* 输出路径模板 */}
         <div className="space-y-1.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <div>
               <label className="text-xs font-bold text-slate-700">
-                整理后输出文件夹路径模板 (output_folder_pattern)
+                整理后分类子目录路径模板 (output_folder_pattern)
               </label>
               <div className="text-[11px] text-slate-500 leading-relaxed mt-0.5 space-y-0.5">
-                <p>定义影片归档目录与子文件夹层级。使用斜杠 <code className="text-indigo-600 font-mono font-semibold">/</code> 分隔多级子目录：</p>
+                <p>在输出根目录下方，定义影片归档与子文件夹层级。使用斜杠 <code className="text-indigo-600 font-mono font-semibold">/</code> 分隔多级子目录：</p>
                 <div className="text-[10.5px] text-slate-400 pl-1 space-y-0.5">
                   <div>
-                    • <strong className="text-slate-600 font-medium">相对路径</strong>（如 <code className="text-indigo-600 font-mono">#整理完成/{"{actress}"}/...</code>）：自动存放在每次扫描整理的目标目录（如 <code className="font-mono text-slate-500">{formConfig.scanner.input_directory || "D:/download"}/#整理完成/...</code>）中；
+                    • <strong className="text-slate-600 font-medium">相对子目录</strong>（如 <code className="text-indigo-600 font-mono">#整理完成/{"{actress}"}/...</code>）：自动存放在每次指定的输出根目录中；
                   </div>
                   <div>
-                    • <strong className="text-slate-600 font-medium">绝对路径</strong>（如 <code className="text-indigo-600 font-mono">E:/MOVIES/{"{actress}"}/...</code>）：跨盘统一归档至指定磁盘或目录，不受扫描目录所在盘符影响。
+                    • <strong className="text-slate-600 font-medium">绝对路径</strong>（如 <code className="text-indigo-600 font-mono">E:/MOVIES/{"{actress}"}/...</code>）：强制跨盘归档至该固定绝对路径。
                   </div>
                 </div>
               </div>
@@ -127,7 +156,7 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
           {/* 实时目录层级效果预览 */}
           <FolderBreadcrumbPreview
             pattern={formConfig.summarizer.path.output_folder_pattern}
-            baseDirectory={formConfig.scanner.input_directory}
+            baseDirectory={formConfig.summarizer.path.output_directory || formConfig.scanner.input_directory}
           />
         </div>
 

@@ -725,4 +725,53 @@ def test_organize_movie_duplicate_collision_with_custom_nfo_pattern(tmp_path: Pa
     assert "版本1简介" in (p / "movie.nfo").read_text(encoding="utf-8")
 
 
+def test_organize_movie_with_output_directory_fallback(tmp_path: Path, monkeypatch):
+    """测试当未传递 base_output_dir 时，自动回退使用 config.summarizer.path.output_directory。"""
+    cfg = get_config()
+    target_out = tmp_path / "global_output_dir"
+    target_out.mkdir()
+    monkeypatch.setattr(cfg.summarizer.path, "output_directory", str(target_out))
+
+    in_dir = tmp_path / "incoming"
+    in_dir.mkdir()
+    video_file = in_dir / "MIDE-123.mp4"
+    video_file.write_bytes(b"content")
+
+    meta = MovieInfo(dvdid="MIDE-123", title="测试输出根目录", actress=["白石茉莉奈"])
+    res = organize_movie(files=[str(video_file)], metadata=meta, base_output_dir=None)
+
+    res_path = Path(res)
+    assert target_out in res_path.parents or res_path == target_out
+    assert (res_path / "MIDE-123.mp4").is_file()
+    assert (res_path / "MIDE-123.nfo").is_file()
+
+
+def test_organize_movie_inplace_mode(tmp_path: Path):
+    """测试原地就地生成模式 (move_files=False, hard_link=False)：不移动视频，仅在当前同级目录生成 NFO。"""
+    src_dir = tmp_path / "original_folder"
+    src_dir.mkdir()
+    video_file = src_dir / "SSIS-999.mp4"
+    video_file.write_bytes(b"inplace video data")
+
+    meta = MovieInfo(dvdid="SSIS-999", title="原地生成测试", actress=["三上悠亜"])
+    res = organize_movie(
+        files=[str(video_file)],
+        metadata=meta,
+        base_output_dir=None,
+        move_files=False,
+        hard_link=False,
+    )
+
+    res_path = Path(res)
+    # 原地模式应直接返回视频所在目录
+    assert res_path == src_dir
+    # 视频仍保留在原地未被删除或移动
+    assert video_file.is_file()
+    assert video_file.read_bytes() == b"inplace video data"
+    # 生成的 NFO 也保存在当前同级目录
+    assert (src_dir / "SSIS-999.nfo").is_file()
+    assert "SSIS-999" in (src_dir / "SSIS-999.nfo").read_text(encoding="utf-8")
+
+
+
 
