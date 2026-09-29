@@ -9,6 +9,7 @@ import { ScanSection } from "./dashboard/components/ScanSection";
 import { CrawlerStatusNotice } from "./dashboard/components/CrawlerStatusNotice";
 import { BatchActionToolbar } from "./dashboard/components/BatchActionToolbar";
 import { TaskListGrid } from "./dashboard/components/TaskListGrid";
+import { SiteReadinessModal } from "./dashboard/components/SiteReadinessModal";
 
 export type { DashboardProps };
 
@@ -43,6 +44,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     handleUpdateDvdid,
     handleBatchStart,
     handleBatchStop,
+    isReadinessModalOpen,
+    readinessSites,
+    isRecheckingReadiness,
+    readinessError,
+    handleConfirmReadiness,
+    handleReopenReadinessTabs,
+    handleCloseReadinessModal,
   } = useDashboardTasks({
     scanDir,
     crawlerConfig,
@@ -110,6 +118,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
           setServerAddress(newAddr);
           wsService.reconnect();
         }}
+      />
+
+      {/* 站点环境就绪感知弹窗 */}
+      <SiteReadinessModal
+        isOpen={isReadinessModalOpen}
+        sites={readinessSites}
+        onConfirm={handleConfirmReadiness}
+        onReopen={handleReopenReadinessTabs}
+        onClose={handleCloseReadinessModal}
+        isRechecking={isRecheckingReadiness}
+        recheckError={readinessError}
       />
     </div>
   );

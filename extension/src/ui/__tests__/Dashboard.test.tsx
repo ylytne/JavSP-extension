@@ -136,6 +136,7 @@ describe("Dashboard 模块化重构后的组件与服务测试", () => {
       extraFanartsMaxCount: 0,
       extraFanartsUniformSampling: true,
       extraFanartsTimeout: 5,
+      extraFanartsConcurrency: 4,
       includeTrailer: false,
       crawlers: ["javbus"],
       useJavdbCover: "fallback",

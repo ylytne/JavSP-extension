@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { initTabBridgeHosts } from "../../../../crawlers/base";
 import { TranslatorConfig } from "../../../../translators";
 import { wsService } from "../../../../services/backend-ws";
 import { serverConfig } from "../../../../services/serverConfig";
 import { LogEntry } from "../../../components/LogDrawer";
 import { CrawlerRuntimeConfig } from "../types";
 import { DEFAULT_DIMENSION_ROUTING } from "../../../../crawlers/dimensionSlots";
+import { ResidentTabManager } from "../../../../crawlers/tabBridge";
 
 const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
   retry: 3,
@@ -13,7 +13,8 @@ const DEFAULT_CRAWLER_CONFIG: CrawlerRuntimeConfig = {
   sleepAfterScraping: 2.0,
   sleepJitter: 2.0,
   extraFanartsEnabled: true,
-  extraFanartsInterval: 0.5,
+  extraFanartsInterval: 0,
+  extraFanartsConcurrency: 4,
   extraFanartsMaxCount: 0,
   extraFanartsUniformSampling: true,
   extraFanartsTimeout: 10,
@@ -56,17 +57,22 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
     const nfoCfg = cfg.summarizer?.nfo || cfg.nfo || {};
     const coverCfg = cfg.summarizer?.cover || cfg.cover || {};
 
-    if (crw.tab_bridge_hosts && Array.isArray(crw.tab_bridge_hosts)) {
-      initTabBridgeHosts(crw.tab_bridge_hosts);
-    }
-
-    if (net.proxy_free && typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
-      chrome.runtime
-        .sendMessage({
-          action: "UPDATE_NET_RULES",
-          proxy_free: net.proxy_free,
-        })
-        .catch(() => {});
+    if (net.proxy_free) {
+      for (const [siteId, rawUrl] of Object.entries(net.proxy_free)) {
+        if (rawUrl && typeof rawUrl === "string" && rawUrl.trim()) {
+          const trimmed = rawUrl.trim();
+          const full = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+          ResidentTabManager.getInstance().setSiteBaseUrl(siteId, full.replace(/\/+$/, ""));
+        }
+      }
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime
+          .sendMessage({
+            action: "UPDATE_NET_RULES",
+            proxy_free: net.proxy_free,
+          })
+          .catch(() => {});
+      }
     }
 
     setCrawlerConfig((prev) => ({
@@ -77,6 +83,8 @@ export function useDashboardConfig(addLog: (level: LogEntry["level"], message: s
       sleepJitter: crw.sleep_jitter ?? prev.sleepJitter,
       extraFanartsEnabled: typeof extra.enabled === "boolean" ? extra.enabled : prev.extraFanartsEnabled,
       extraFanartsInterval: extra.scrap_interval ?? prev.extraFanartsInterval,
+      extraFanartsConcurrency:
+        typeof extra.concurrency === "number" ? extra.concurrency : prev.extraFanartsConcurrency,
       extraFanartsMaxCount: typeof extra.max_count === "number" ? extra.max_count : prev.extraFanartsMaxCount,
       extraFanartsUniformSampling: typeof extra.uniform_sampling === "boolean" ? extra.uniform_sampling : prev.extraFanartsUniformSampling,
       extraFanartsTimeout: typeof extra.timeout === "number" ? extra.timeout : prev.extraFanartsTimeout,

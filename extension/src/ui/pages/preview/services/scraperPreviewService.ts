@@ -249,8 +249,13 @@ export async function executeScrapePreview(
     ...(summarized.covers || []),
   ];
   const candidateUrls = Array.from(new Set(rawCandidates.filter(Boolean)));
+  const candidateCoversToTry =
+    summarized.candidate_covers_attributed &&
+    summarized.candidate_covers_attributed.length > 0
+      ? summarized.candidate_covers_attributed
+      : candidateUrls;
   const { coverBase64 } = await downloadCoversWithFallback(
-    candidateUrls,
+    candidateCoversToTry,
     dvdid,
     retryConfig,
     addLog,
@@ -269,14 +274,18 @@ export async function executeScrapePreview(
     sampleFanartUrl = summarized.preview_pics[0];
     addLog("step", `[${dvdid}] [剧照测试模式] 严格仅下载第 1 张剧照样本以验证图片通道...`);
     try {
-      sampleFanartBase64 = await BaseCrawler.fetchImageAsBase64(sampleFanartUrl, {
-        maxRetries: 2,
-        baseDelayMs: 1000,
-        timeoutMs: (crawlerConfig.extraFanartsTimeout || 10) * 1000,
-        onRetry: (attempt, max, reason) => {
-          addLog("warn", `[${dvdid}] 剧照下载遇到网络抖动 (${reason})，正在重试 (${attempt}/${max})...`);
-        },
-      });
+      sampleFanartBase64 = await BaseCrawler.fetchImageAsBase64(
+        sampleFanartUrl,
+        summarized.preview_source || "javbus",
+        {
+          maxRetries: 2,
+          baseDelayMs: 1000,
+          timeoutMs: (crawlerConfig.extraFanartsTimeout || 10) * 1000,
+          onRetry: (attempt, max, reason) => {
+            addLog("warn", `[${dvdid}] 剧照下载遇到网络抖动 (${reason})，正在重试 (${attempt}/${max})...`);
+          },
+        }
+      );
       const fanartSizeKb = Math.round((sampleFanartBase64.length * 0.75) / 1024);
       addLog("info", `[${dvdid}] [剧照测试模式] 成功获取剧照样本 (1/1): 约 ${fanartSizeKb} KB`);
     } catch (err: any) {

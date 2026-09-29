@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import {
-  X,
-  Plus,
   AlertCircle,
   Info,
   Check,
@@ -15,7 +13,6 @@ import {
   Sliders,
 } from "lucide-react";
 import { FullAppConfig } from "../types";
-import { extractHostname } from "../../../../crawlers/tabBridge";
 import {
   normalizeSiteUrl,
   testSiteConnectivity,
@@ -160,7 +157,6 @@ const PROXY_FREE_SITES: ProxyFreeSiteMeta[] = [
 ];
 
 export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }) => {
-  const [newHostInput, setNewHostInput] = useState("");
   const [testingSites, setTestingSites] = useState<Record<string, boolean>>({});
   const [testResults, setTestResults] = useState<Record<string, ConnectivityTestResult | null>>({});
 
@@ -194,22 +190,6 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
 
   const handleResetProxy = (siteId: string) => {
     handleUpdateProxy(siteId, "");
-  };
-
-  const handleAddHost = () => {
-    const raw = newHostInput.trim();
-    if (!raw) return;
-    const host = extractHostname(raw);
-    if (!host) return;
-
-    updateForm((cfg) => {
-      const current = cfg.crawler.tab_bridge_hosts || [];
-      if (!current.includes(host)) {
-        cfg.crawler.tab_bridge_hosts = [...current, host];
-      }
-      return cfg;
-    });
-    setNewHostInput("");
   };
 
   const enabledCrawlerIds = formConfig.crawlers || [];
@@ -945,74 +925,6 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ formConfig, updateForm }
             </div>
           </div>
         )}
-      </div>
-
-      {/* 标签页桥接 (TabBridge) 站点名单 */}
-      <div className="pt-3 border-t border-slate-100">
-        <div className="mb-2">
-          <label className="block text-xs font-bold text-slate-700">
-            标签页桥接 (TabBridge) 绕过名单
-          </label>
-          <div className="text-[11px] text-slate-500 mt-0.5">
-            当站点开启严格 WAF（如 Cloudflare 跨域拦截 HTTP 403）时，系统会自动将域名持久化登记在此处，此后将直接使用真实浏览器标签页同源通道抓取，免受拦截。
-          </div>
-        </div>
-
-        {/* 标签列表 */}
-        <div className="flex flex-wrap gap-2 mb-2.5 p-2.5 bg-slate-50 border border-slate-200 rounded-lg min-h-[44px] items-center">
-          {formConfig.crawler.tab_bridge_hosts && formConfig.crawler.tab_bridge_hosts.length > 0 ? (
-            formConfig.crawler.tab_bridge_hosts.map((host) => (
-              <span
-                key={host}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-indigo-200 text-indigo-900 rounded-md text-xs font-mono shadow-2xs"
-              >
-                {host}
-                <button
-                  type="button"
-                  title={`移除 ${host}`}
-                  onClick={() =>
-                    updateForm((cfg) => {
-                      cfg.crawler.tab_bridge_hosts = (cfg.crawler.tab_bridge_hosts || []).filter(
-                        (h) => h !== host
-                      );
-                      return cfg;
-                    })
-                  }
-                  className="text-slate-400 hover:text-rose-600 transition"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </span>
-            ))
-          ) : (
-            <span className="text-xs text-slate-400 italic">暂无记录的 Tab 桥接站点</span>
-          )}
-        </div>
-
-        {/* 手动添加输入框 */}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="输入域名，例如 airav.io 或 https://..."
-            value={newHostInput}
-            onChange={(e) => setNewHostInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleAddHost();
-              }
-            }}
-            className="flex-1 text-xs font-mono px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <button
-            type="button"
-            onClick={handleAddHost}
-            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            添加域名
-          </button>
-        </div>
       </div>
     </div>
   );

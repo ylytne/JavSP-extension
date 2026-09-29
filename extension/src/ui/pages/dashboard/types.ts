@@ -8,6 +8,7 @@ export interface CrawlerRuntimeConfig {
   sleepJitter: number;
   extraFanartsEnabled: boolean;
   extraFanartsInterval: number;
+  extraFanartsConcurrency: number;
   extraFanartsMaxCount: number;
   extraFanartsUniformSampling: boolean;
   extraFanartsTimeout: number;

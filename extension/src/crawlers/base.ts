@@ -142,20 +142,12 @@ export function unescapeHtml(text: string | undefined | null): string {
 import {
   fetchDocumentViaTab,
   fetchImageViaTab,
-  isTabBridgeHost,
-  markHostAsTabBridge,
-  initTabBridgeHosts,
-  getTabBridgeHosts,
-  unmarkHostAsTabBridge,
+  ResidentTabManager,
 } from "./tabBridge";
 export {
   fetchDocumentViaTab,
   fetchImageViaTab,
-  isTabBridgeHost,
-  markHostAsTabBridge,
-  initTabBridgeHosts,
-  getTabBridgeHosts,
-  unmarkHostAsTabBridge,
+  ResidentTabManager,
 };
 
 export * from "./dvdid";
@@ -187,41 +179,31 @@ export abstract class BaseCrawler implements ICrawler {
   }
 
   /**
-   * 发起网络请求并解析为 DOM Document（支持域名级 TabBridge 绕过、超时控制与智能重试；遭遇反爬阻断时自动记录并永久降级）。
+   * 发起网络请求并解析为 DOM Document（扩展环境下 100% 默认走 TabBridge 标签页通道；非扩展环境走降级原生 fetch）。
    */
   async fetchDocument(url: string, retryConfig?: RequestRetryConfig): Promise<Document> {
-    // 1. 前置短路：若已知目标域名必须走 TabBridge，免试探直接走标签页通道
-    if (isTabBridgeHost(url) && typeof chrome !== "undefined" && chrome.tabs) {
-      return await fetchDocumentViaTab(url, retryConfig?.timeoutMs ?? 15000);
+    if (typeof chrome !== "undefined" && chrome.tabs) {
+      return await fetchDocumentViaTab(url, this.name, retryConfig?.timeoutMs ?? 15000);
     }
 
-    try {
-      const response = await fetchWithRetry(
-        url,
-        {
-          credentials: "include", // 携带浏览器已有的会话 Cookie 与登录凭据
-          headers: {
-            Accept:
-              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
-            "Upgrade-Insecure-Requests": "1",
-          },
+    const response = await fetchWithRetry(
+      url,
+      {
+        credentials: "include", // 携带浏览器已有的会话 Cookie 与登录凭据
+        headers: {
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+          "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
+          "Upgrade-Insecure-Requests": "1",
         },
-        retryConfig,
-        this.name
-      );
+      },
+      retryConfig,
+      this.name
+    );
 
-      const htmlText = await response.text();
-      const parser = new DOMParser();
-      return parser.parseFromString(htmlText, "text/html");
-    } catch (err) {
-      // 2. 动态学习：若普通 fetch 遭遇 403 / 503 阻断，记录该站点永久走 TabBridge，并异步持久化到 config.yml
-      if (err instanceof SiteBlockedError && typeof chrome !== "undefined" && chrome.tabs) {
-        markHostAsTabBridge(url).catch(() => {});
-        return await fetchDocumentViaTab(url, retryConfig?.timeoutMs ?? 15000);
-      }
-      throw err;
-    }
+    const htmlText = await response.text();
+    const parser = new DOMParser();
+    return parser.parseFromString(htmlText, "text/html");
   }
 
   /**
@@ -251,17 +233,17 @@ export abstract class BaseCrawler implements ICrawler {
   }
 
   /**
-   * 将远程图片二进制转为 Base64 字符串（支持域名短路、超时、重试与 Tab 桥接永久回退）。
+   * 将远程图片二进制转为 Base64 字符串（扩展环境下 100% 默认走 TabBridge 标签页同源通道；非扩展环境兜底）。
    */
   static async fetchImageAsBase64(
     imageUrl: string,
+    sourceSite: string = "javbus",
     retryConfig?: RequestRetryConfig
   ): Promise<string> {
-    // 1. 前置短路：若已知目标域名必须走 TabBridge，直接走标签页同源通道
-    if (isTabBridgeHost(imageUrl) && typeof chrome !== "undefined" && chrome.tabs) {
-      return await fetchImageViaTab(imageUrl, retryConfig?.timeoutMs ?? 15000);
-    }
+    const timeoutMs = retryConfig?.timeoutMs ?? 15000;
 
+    // 1. 优先尝试直接在扩展上下文中发起原生 fetch（依托 Manifest host_permissions 规避 Web 标签页的 CORS 限制，
+    //    并配合 Service Worker DNR 自动注入的 Referer 防盗链头），具备毫秒级无损吞吐，且完美支持跨域第三方图床（如 DMM awsimgsrc）；
     try {
       let response: Response;
       const headers = {
@@ -269,54 +251,60 @@ export abstract class BaseCrawler implements ICrawler {
       };
 
       try {
-        // 优先尝试携带凭据请求（复用登录态与过盾 Cookie）
         response = await fetchWithRetry(
           imageUrl,
           {
             credentials: "include",
             headers,
           },
-          retryConfig,
+          { maxRetries: 1, baseDelayMs: 300, timeoutMs },
           "Image"
         );
-      } catch (err) {
-        // 若是 404 则无需重试直接抛出
-        if (err instanceof MovieNotFoundError) {
-          throw err;
-        }
-        // 若遭遇 403 / 503 等反爬阻断，记录域名并走 Tab 桥接
-        if (err instanceof SiteBlockedError && typeof chrome !== "undefined" && chrome.tabs) {
-          markHostAsTabBridge(imageUrl).catch(() => {});
-          return await fetchImageViaTab(imageUrl, retryConfig?.timeoutMs ?? 15000);
-        }
-        // 若因 CORS 限制等偶发异常，降级不带凭据尝试
+      } catch (err: any) {
+        if (err instanceof MovieNotFoundError) throw err;
+        if (err instanceof SiteBlockedError) throw err;
+        // 若因 CORS 限制抛错，降级为不带凭据尝试（在扩展 host_permissions 下完全豁免 CORS）
         response = await fetchWithRetry(
           imageUrl,
           {
             credentials: "omit",
             headers,
           },
-          retryConfig,
+          { maxRetries: 1, baseDelayMs: 300, timeoutMs },
           "Image"
         );
       }
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
       const blob = await response.blob();
-      return new Promise((resolve, reject) => {
+      return await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
-          const result = reader.result as string;
-          resolve(result);
+          const res = reader.result as string;
+          if (res) resolve(res);
+          else reject(new Error("FileReader 返回空结果"));
         };
         reader.onerror = () => reject(new Error(`读取图片数据失败 (${imageUrl})`));
         reader.readAsDataURL(blob);
       });
-    } catch (finalErr) {
-      if (finalErr instanceof SiteBlockedError && typeof chrome !== "undefined" && chrome.tabs) {
-        markHostAsTabBridge(imageUrl).catch(() => {});
-        return await fetchImageViaTab(imageUrl, retryConfig?.timeoutMs ?? 15000);
+    } catch (err: any) {
+      if (err instanceof MovieNotFoundError) {
+        throw err;
       }
-      throw finalErr;
+
+      // 2. 若直接 fetch 遭遇 403 / 503 等反爬阻断，且处于 Chrome 扩展环境中，则降级走 TabBridge 常驻标签页同源通道
+      if (typeof chrome !== "undefined" && chrome.tabs) {
+        try {
+          return await fetchImageViaTab(imageUrl, sourceSite, timeoutMs);
+        } catch (tabErr) {
+          throw tabErr;
+        }
+      }
+
+      throw err;
     }
   }
 }

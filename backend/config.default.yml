@@ -45,8 +45,6 @@ network:
 crawler:
   sleep_after_scraping: 2.0
   sleep_jitter: 2.0
-  tab_bridge_hosts:
-  - airav.io
   # 大批量请求冷却防风控保护 (Burst Protection)
   burst_protection_enabled: true
   burst_limit: 10
@@ -141,10 +139,13 @@ summarizer:
     basename_pattern: '{num}-fanart'
   extra_fanarts:
     enabled: true
+    # 单通道间隔延时 (秒，并发模式推荐 0 或低延时以防频控)
     scrap_interval: 0.5
     timeout: 10.0
     max_count: 10
     uniform_sampling: true
+    # 剧照并发下载通道数 (1~8，默认 4)
+    concurrency: 4
   subtitle:
     enabled: true
     auto_c_suffix: false

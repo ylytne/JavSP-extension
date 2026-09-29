@@ -17,6 +17,7 @@ const mockCrawlerConfig: CrawlerRuntimeConfig = {
   extraFanartsMaxCount: 10,
   extraFanartsUniformSampling: true,
   extraFanartsTimeout: 5,
+  extraFanartsConcurrency: 4,
   includeTrailer: false,
   crawlers: ["javbus", "javdb", "airav"],
   useJavdbCover: "fallback",
@@ -161,6 +162,7 @@ describe("scraperPreviewService 刮削测试流水线单元测试", () => {
     expect(fetchPicSpy).toHaveBeenCalledTimes(1);
     expect(fetchPicSpy).toHaveBeenCalledWith(
       "https://pics.javbus.com/sample1.jpg",
+      "javbus",
       expect.anything()
     );
     expect(report.sampleFanartUrl).toBe("https://pics.javbus.com/sample1.jpg");

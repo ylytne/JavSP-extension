@@ -2,7 +2,7 @@
  * 多源数据汇总、水印降级策略、尾部女优清洗与语言感知流水线
  */
 
-import { MovieInfo } from "./types";
+import { MovieInfo, AttributedCover } from "./types";
 import { isValidTitle, detectTextLanguage } from "./dvdid";
 import {
   DimensionRoutingConfig,
@@ -287,7 +287,7 @@ export function summarizeMovieResults(
   // 3. 剧照预览图（单源整套独占：遵循 previewsRoute 顺位）
   // -------------------------------------------------------------
   const previewsRoute = resolveActiveRoute("previews", routingConfig, priorityOrder);
-  const { value: selectedPreviews } = resolveSlot(
+  const { value: selectedPreviews, source: previewsSource } = resolveSlot(
     siteData,
     previewsRoute,
     (d) => d.preview_pics,
@@ -295,6 +295,7 @@ export function summarizeMovieResults(
   );
   if (selectedPreviews && selectedPreviews.length > 0) {
     merged.preview_pics = [...selectedPreviews];
+    merged.preview_source = previewsSource;
   }
 
   // -------------------------------------------------------------
@@ -374,23 +375,40 @@ export function summarizeMovieResults(
   // -------------------------------------------------------------
   const candidateCovers: string[] = [];
   const candidateBigCovers: string[] = [];
+  const candidateCoversAttributed: AttributedCover[] = [];
 
-  const addCoversFromData = (data: Partial<MovieInfo> | undefined) => {
+  const addCoversFromData = (data: Partial<MovieInfo> | undefined, siteId: string) => {
     if (!data) return;
     if (data.big_cover && !candidateBigCovers.includes(data.big_cover)) {
       candidateBigCovers.push(data.big_cover);
+      if (!candidateCoversAttributed.some((c) => c.url === data.big_cover)) {
+        candidateCoversAttributed.push({ url: data.big_cover, sourceSite: siteId, isBig: true });
+      }
     }
     if (data.big_covers) {
       for (const bc of data.big_covers) {
-        if (bc && !candidateBigCovers.includes(bc)) candidateBigCovers.push(bc);
+        if (bc && !candidateBigCovers.includes(bc)) {
+          candidateBigCovers.push(bc);
+          if (!candidateCoversAttributed.some((c) => c.url === bc)) {
+            candidateCoversAttributed.push({ url: bc, sourceSite: siteId, isBig: true });
+          }
+        }
       }
     }
     if (data.cover && !candidateCovers.includes(data.cover)) {
       candidateCovers.push(data.cover);
+      if (!candidateCoversAttributed.some((c) => c.url === data.cover)) {
+        candidateCoversAttributed.push({ url: data.cover, sourceSite: siteId, isBig: false });
+      }
     }
     if (data.covers) {
       for (const c of data.covers) {
-        if (c && !candidateCovers.includes(c)) candidateCovers.push(c);
+        if (c && !candidateCovers.includes(c)) {
+          candidateCovers.push(c);
+          if (!candidateCoversAttributed.some((item) => item.url === c)) {
+            candidateCoversAttributed.push({ url: c, sourceSite: siteId, isBig: false });
+          }
+        }
       }
     }
   };
@@ -405,11 +423,12 @@ export function summarizeMovieResults(
       : coverRoute;
 
   for (const site of effectiveCoverRoute) {
-    addCoversFromData(siteData[site]);
+    addCoversFromData(siteData[site], site);
   }
 
   merged.covers = candidateCovers;
   merged.big_covers = candidateBigCovers;
+  merged.candidate_covers_attributed = candidateCoversAttributed;
   merged.cover =
     candidateCovers.length > 0
       ? candidateCovers[0]

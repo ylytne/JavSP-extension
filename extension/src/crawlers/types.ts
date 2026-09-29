@@ -2,6 +2,15 @@
  * JavSP 数据契约与核心类型定义
  */
 
+export interface AttributedMedia {
+  url: string;
+  sourceSite: string; // 采集该图片的爬虫标识，例如 "javbus" | "javdb" | "airav"
+}
+
+export interface AttributedCover extends AttributedMedia {
+  isBig?: boolean;
+}
+
 export interface MovieInfo {
   dvdid: string;               // DVD ID (如 IPX-177)
   cid?: string;                // DMM Content ID
@@ -18,6 +27,10 @@ export interface MovieInfo {
   big_cover?: string;          // 高清大图 URL (若有)
   covers: string[];            // 候选封面列表
   big_covers: string[];        // 候选高清大图列表
+  preview_pics: string[];      // 剧照预览图 URL 列表
+  preview_video?: string;      // 预告视频 URL
+  preview_source?: string;     // 选定剧照集合的源站点（剧照整套独占）
+  candidate_covers_attributed?: AttributedCover[]; // 候选封面与来源站点的映射列表
   score?: string;              // 10分制评分字符串 (如 "8.40")
   publish_date?: string;       // 发行日期 (YYYY-MM-DD)
   duration?: string;           // 时长 (纯数字字符串，如 "120")
@@ -29,8 +42,6 @@ export interface MovieInfo {
   genre_id?: string[];         // 站点原始分类 ID
   genre_norm?: string[];       // 规范化后的分类标签列表
   actress: string[];           // 出演女优列表
-  preview_pics: string[];      // 剧照预览图 URL 列表
-  preview_video?: string;      // 预告视频 URL
   uncensored?: boolean;        // 是否无码
   magnet?: string[];           // 磁力链接列表
 }

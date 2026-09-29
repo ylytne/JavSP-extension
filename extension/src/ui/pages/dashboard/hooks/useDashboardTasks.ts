@@ -4,8 +4,13 @@ import { wsService } from "../../../../services/backend-ws";
 import { serverConfig } from "../../../../services/serverConfig";
 import { TranslatorConfig } from "../../../../translators";
 import { LogEntry } from "../../../components/LogDrawer";
-import { CrawlerRuntimeConfig, ScanProgress, StatusFilter } from "../types";
+import { CrawlerRuntimeConfig, ScanProgress, StatusFilter, getCrawlerSiteInfo } from "../types";
 import { executeScrapePipeline } from "../services/scraperPipeline";
+import {
+  ResidentTabManager,
+  SiteReadinessItem,
+  TargetSiteConfig,
+} from "../../../../crawlers/tabBridge";
 import {
   calculateNextBurstTarget,
   calculateBurstCooldown,
@@ -124,8 +129,34 @@ export function useDashboardTasks({
     wsService.scanStart(scanDir.trim());
   }, [scanDir, addLog]);
 
-  // 单部影片抓取并整理流程
-  const handleScrapeSingle = useCallback(
+  type PendingScrapeAction =
+    | { type: "single"; item: ScanMovieItem }
+    | { type: "batch" }
+    | null;
+
+  const [pendingAction, setPendingAction] = useState<PendingScrapeAction>(null);
+  const [isReadinessModalOpen, setIsReadinessModalOpen] = useState(false);
+  const [readinessSites, setReadinessSites] = useState<SiteReadinessItem[]>([]);
+  const [isRecheckingReadiness, setIsRecheckingReadiness] = useState(false);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
+
+  const getRequiredSites = useCallback((): TargetSiteConfig[] => {
+    const enabled =
+      crawlerConfig.crawlers && crawlerConfig.crawlers.length > 0
+        ? crawlerConfig.crawlers
+        : ["javbus", "javdb", "airav"];
+    return enabled.map((cId) => {
+      const info = getCrawlerSiteInfo(cId, crawlerConfig.proxyFree);
+      return {
+        id: cId,
+        baseUrl: info.url,
+        name: info.name,
+      };
+    });
+  }, [crawlerConfig.crawlers, crawlerConfig.proxyFree]);
+
+  // 单部影片抓取核心逻辑
+  const executeScrapeSingleInternal = useCallback(
     async (item: ScanMovieItem) => {
       const updateCurrentTask = (patch: Partial<ScanMovieItem>) => {
         setTasks((prev) =>
@@ -143,6 +174,24 @@ export function useDashboardTasks({
       });
     },
     [crawlerConfig, translatorConfig, scanDir, addLog]
+  );
+
+  // 单部影片抓取触发（前置站点就绪感知）
+  const handleScrapeSingle = useCallback(
+    async (item: ScanMovieItem) => {
+      const required = getRequiredSites();
+      const res = await ResidentTabManager.getInstance().checkSitesReadiness(required);
+      if (res.ready) {
+        await executeScrapeSingleInternal(item);
+      } else {
+        await ResidentTabManager.getInstance().openMissingSiteTabs(res.missingOrBlockedSites);
+        setPendingAction({ type: "single", item });
+        setReadinessSites(res.missingOrBlockedSites);
+        setReadinessError(null);
+        setIsReadinessModalOpen(true);
+      }
+    },
+    [getRequiredSites, executeScrapeSingleInternal]
   );
 
   // 手动修改更正番号
@@ -204,8 +253,8 @@ export function useDashboardTasks({
     [addLog]
   );
 
-  // 批量执行
-  const handleBatchStart = useCallback(async () => {
+  // 批量执行核心逻辑
+  const executeBatchScrapingInternal = useCallback(async () => {
     const pendingTasks = tasks.filter(
       (t) => (t.status === "pending" || t.status === "error") && Boolean(t.dvdid)
     );
@@ -230,7 +279,7 @@ export function useDashboardTasks({
         break;
       }
       const task = pendingTasks[i];
-      await handleScrapeSingle(task);
+      await executeScrapeSingleInternal(task);
       processedCountInCurrentBurst++;
 
       // 非最后一项且未中止时，执行等待控制
@@ -282,7 +331,7 @@ export function useDashboardTasks({
     addLog("info", "批量处理队列已全部执行完毕");
   }, [
     tasks,
-    handleScrapeSingle,
+    executeScrapeSingleInternal,
     crawlerConfig.burstProtectionEnabled,
     crawlerConfig.burstLimit,
     crawlerConfig.burstJitter,
@@ -292,6 +341,67 @@ export function useDashboardTasks({
     crawlerConfig.sleepJitter,
     addLog,
   ]);
+
+  // 批量执行触发（前置站点就绪感知）
+  const handleBatchStart = useCallback(async () => {
+    const pendingTasks = tasks.filter(
+      (t) => (t.status === "pending" || t.status === "error") && Boolean(t.dvdid)
+    );
+    if (pendingTasks.length === 0) {
+      addLog("info", "当前无待处理或失败任务");
+      return;
+    }
+
+    const required = getRequiredSites();
+    const res = await ResidentTabManager.getInstance().checkSitesReadiness(required);
+    if (res.ready) {
+      await executeBatchScrapingInternal();
+    } else {
+      await ResidentTabManager.getInstance().openMissingSiteTabs(res.missingOrBlockedSites);
+      setPendingAction({ type: "batch" });
+      setReadinessSites(res.missingOrBlockedSites);
+      setReadinessError(null);
+      setIsReadinessModalOpen(true);
+    }
+  }, [tasks, getRequiredSites, executeBatchScrapingInternal, addLog]);
+
+  const handleConfirmReadiness = useCallback(async () => {
+    setIsRecheckingReadiness(true);
+    setReadinessError(null);
+    try {
+      const required = getRequiredSites();
+      const res = await ResidentTabManager.getInstance().checkSitesReadiness(required);
+      if (res.ready) {
+        setIsReadinessModalOpen(false);
+        setIsRecheckingReadiness(false);
+        const action = pendingAction;
+        setPendingAction(null);
+        if (action?.type === "single" && action.item) {
+          await executeScrapeSingleInternal(action.item);
+        } else if (action?.type === "batch") {
+          await executeBatchScrapingInternal();
+        }
+      } else {
+        setIsRecheckingReadiness(false);
+        setReadinessSites(res.missingOrBlockedSites);
+        const names = res.missingOrBlockedSites.map((s) => s.name).join("、");
+        setReadinessError(`仍有站点未过盾: [${names}]，请在浏览器对应标签页完成验证后重试`);
+      }
+    } catch (err: any) {
+      setIsRecheckingReadiness(false);
+      setReadinessError(err?.message || "复检发生错误");
+    }
+  }, [getRequiredSites, pendingAction, executeScrapeSingleInternal, executeBatchScrapingInternal]);
+
+  const handleReopenReadinessTabs = useCallback(async () => {
+    await ResidentTabManager.getInstance().openMissingSiteTabs(readinessSites, true);
+  }, [readinessSites]);
+
+  const handleCloseReadinessModal = useCallback(() => {
+    setIsReadinessModalOpen(false);
+    setPendingAction(null);
+    setReadinessError(null);
+  }, []);
 
   const handleBatchStop = useCallback(() => {
     batchCancelRef.current = true;
@@ -334,5 +444,12 @@ export function useDashboardTasks({
     handleUpdateDvdid,
     handleBatchStart,
     handleBatchStop,
+    isReadinessModalOpen,
+    readinessSites,
+    isRecheckingReadiness,
+    readinessError,
+    handleConfirmReadiness,
+    handleReopenReadinessTabs,
+    handleCloseReadinessModal,
   };
 }
