@@ -30,11 +30,23 @@ export interface RecropPostersResponse {
   results: RecropPosterItem[];
 }
 
+export interface RewriteRule {
+  id: string;
+  name: string;
+  rule_type: "remove_node" | "replace_node" | "replace_text" | "append_node";
+  target: string;
+  replacement?: string;
+  scope?: string;
+  enabled: boolean;
+}
+
 export interface CleanNfoFileResultItem {
   path: string;
   changed: boolean;
   trailer_removed: number;
   actor_thumb_removed: number;
+  art_removed?: number;
+  rule_hits?: Record<string, number>;
   error: string | null;
 }
 
@@ -45,6 +57,8 @@ export interface CleanNfoResponse {
   modified_files: number;
   total_trailer_removed: number;
   total_actor_thumb_removed: number;
+  total_art_removed?: number;
+  total_rule_hits?: Record<string, number>;
   error_files: number;
   dry_run: boolean;
   results: CleanNfoFileResultItem[];
@@ -57,6 +71,7 @@ export interface PreviewNfoResponse {
   cleaned: string;
   trailer_removed: number;
   actor_thumb_removed: number;
+  art_removed?: number;
+  rule_hits?: Record<string, number>;
   changed: boolean;
 }
-

@@ -222,13 +222,13 @@ def generate_nfo_content(
     if cfg.summarizer.nfo.include_trailer and info.preview_video:
         movie_elem.append(E.trailer(info.preview_video))
 
-    # 16. 演员（生成规范化演员节点，不写 <thumb>，依靠媒体库全局人物库匹配头像）
+    # 16. 演员（生成规范化演员节点，带 <type>Actor</type> 确保 Jellyfin/Emby 完全兼容，不写 <thumb>）
     if info.actress:
         for act in info.actress:
             act_clean = act.strip()
             if not act_clean:
                 continue
-            movie_elem.append(E.actor(E.name(act_clean)))
+            movie_elem.append(E.actor(E.name(act_clean), E.type("Actor")))
 
     xml_text = tostring(
         movie_elem,

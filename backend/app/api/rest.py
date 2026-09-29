@@ -25,7 +25,7 @@ from app.config import (
 )
 from app.api.ws import manager
 from app.core.models import MovieInfo
-from app.core.nfo_cleaner import clean_nfo_directory, clean_nfo_content
+from app.core.nfo_cleaner import clean_nfo_directory, clean_nfo_content, RewriteRule
 from app.core.organizer import simulate_movie_organization
 from app.core.poster_recropper import recrop_directory_posters
 
@@ -39,11 +39,24 @@ class RawConfigRequest(BaseModel):
     yaml: str
 
 
+class RewriteRuleItem(BaseModel):
+    """NFO 规则重写请求项。"""
+    id: str
+    name: str
+    rule_type: str = "remove_node"
+    target: str
+    replacement: str = ""
+    scope: str | None = None
+    enabled: bool = True
+
+
 class CleanNfoRequest(BaseModel):
-    """NFO 标签清理请求体。"""
+    """NFO 标签清理/重写请求体。"""
     directory: str
     clean_trailer: bool = True
     clean_actor_thumb: bool = True
+    clean_art: bool = False
+    rules: list[RewriteRuleItem] | None = None
     recursive: bool = True
     dry_run: bool = False
     backup: bool = False
@@ -55,6 +68,8 @@ class CleanNfoFileResultItem(BaseModel):
     changed: bool
     trailer_removed: int
     actor_thumb_removed: int
+    art_removed: int = 0
+    rule_hits: dict[str, int] = Field(default_factory=dict)
     error: str | None = None
 
 
@@ -66,6 +81,8 @@ class CleanNfoResponse(BaseModel):
     modified_files: int
     total_trailer_removed: int
     total_actor_thumb_removed: int
+    total_art_removed: int = 0
+    total_rule_hits: dict[str, int] = Field(default_factory=dict)
     error_files: int
     dry_run: bool
     results: list[CleanNfoFileResultItem]
@@ -76,6 +93,8 @@ class PreviewNfoRequest(BaseModel):
     path: str
     clean_trailer: bool = True
     clean_actor_thumb: bool = True
+    clean_art: bool = False
+    rules: list[RewriteRuleItem] | None = None
 
 
 class PreviewNfoResponse(BaseModel):
@@ -86,6 +105,8 @@ class PreviewNfoResponse(BaseModel):
     cleaned: str
     trailer_removed: int
     actor_thumb_removed: int
+    art_removed: int = 0
+    rule_hits: dict[str, int] = Field(default_factory=dict)
     changed: bool
 
 
@@ -238,16 +259,31 @@ async def get_image(
 
 @router.post("/tools/clean-nfo", response_model=CleanNfoResponse)
 async def clean_nfo_endpoint(req: CleanNfoRequest) -> dict[str, Any]:
-    """扫描指定目录下所有 NFO 文件，清理其中的 trailer 标签和 actor.thumb 标签。"""
+    """扫描指定目录下所有 NFO 文件，执行标签清理与重写替换。"""
     target_path = Path(req.directory).resolve()
     if not target_path.exists() or not target_path.is_dir():
         raise HTTPException(status_code=400, detail=f"目标目录不存在或不是有效文件夹: {req.directory}")
+
+    core_rules = [
+        RewriteRule(
+            id=r.id,
+            name=r.name,
+            rule_type=r.rule_type,  # type: ignore
+            target=r.target,
+            replacement=r.replacement,
+            scope=r.scope,
+            enabled=r.enabled,
+        )
+        for r in req.rules
+    ] if req.rules is not None else None
 
     summary = await anyio.to_thread.run_sync(
         clean_nfo_directory,
         target_path,
         req.clean_trailer,
         req.clean_actor_thumb,
+        req.clean_art,
+        core_rules,
         req.recursive,
         req.dry_run,
         req.backup,
@@ -260,6 +296,8 @@ async def clean_nfo_endpoint(req: CleanNfoRequest) -> dict[str, Any]:
         "modified_files": summary.modified_files,
         "total_trailer_removed": summary.total_trailer_removed,
         "total_actor_thumb_removed": summary.total_actor_thumb_removed,
+        "total_art_removed": summary.total_art_removed,
+        "total_rule_hits": summary.total_rule_hits,
         "error_files": summary.error_files,
         "dry_run": req.dry_run,
         "results": [
@@ -268,6 +306,8 @@ async def clean_nfo_endpoint(req: CleanNfoRequest) -> dict[str, Any]:
                 "changed": r.changed,
                 "trailer_removed": r.trailer_removed,
                 "actor_thumb_removed": r.actor_thumb_removed,
+                "art_removed": r.art_removed,
+                "rule_hits": r.rule_hits,
                 "error": r.error,
             }
             for r in summary.results
@@ -277,28 +317,44 @@ async def clean_nfo_endpoint(req: CleanNfoRequest) -> dict[str, Any]:
 
 @router.post("/tools/preview-nfo", response_model=PreviewNfoResponse)
 async def preview_nfo_endpoint(req: PreviewNfoRequest) -> dict[str, Any]:
-    """单文件按需对比预览：获取该 NFO 文件在清理前与清理后的内容对比。"""
+    """单文件按需对比预览：获取该 NFO 文件在清理/重写前与后的内容对比。"""
     target_file = Path(req.path).resolve()
     if not target_file.exists() or not target_file.is_file():
         raise HTTPException(status_code=400, detail=f"文件不存在或不是普通文件: {req.path}")
 
+    core_rules = [
+        RewriteRule(
+            id=r.id,
+            name=r.name,
+            rule_type=r.rule_type,  # type: ignore
+            target=r.target,
+            replacement=r.replacement,
+            scope=r.scope,
+            enabled=r.enabled,
+        )
+        for r in req.rules
+    ] if req.rules is not None else None
+
     try:
         raw_bytes = target_file.read_bytes()
         orig_text = raw_bytes.decode("utf-8", errors="replace")
-        cleaned_text, trailer_cnt, thumb_cnt = clean_nfo_content(
+        res = clean_nfo_content(
             raw_bytes,
             clean_trailer=req.clean_trailer,
             clean_actor_thumb=req.clean_actor_thumb,
+            clean_art=req.clean_art,
+            rules=core_rules,
         )
-        changed = trailer_cnt > 0 or thumb_cnt > 0
         return {
             "status": "ok",
             "path": str(target_file),
             "original": orig_text,
-            "cleaned": cleaned_text,
-            "trailer_removed": trailer_cnt,
-            "actor_thumb_removed": thumb_cnt,
-            "changed": changed,
+            "cleaned": res.xml_text,
+            "trailer_removed": res.trailer_count,
+            "actor_thumb_removed": res.thumb_count,
+            "art_removed": res.art_count,
+            "rule_hits": res.rule_hits,
+            "changed": res.total_hits > 0,
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"无法解析该 NFO 文件: {exc}") from exc

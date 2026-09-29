@@ -10,14 +10,16 @@ import {
   User,
 } from "lucide-react";
 import { serverConfig } from "../../../../services/serverConfig";
-import { PreviewNfoResponse } from "../types";
+import { PreviewNfoResponse, RewriteRule } from "../types";
 
 interface NfoDiffModalProps {
   isOpen: boolean;
   onClose: () => void;
   filePath: string | null;
-  cleanTrailer: boolean;
-  cleanActorThumb: boolean;
+  cleanTrailer?: boolean;
+  cleanActorThumb?: boolean;
+  cleanArt?: boolean;
+  rules?: RewriteRule[];
   cachedData?: PreviewNfoResponse | null;
   onDataLoaded?: (path: string, data: PreviewNfoResponse) => void;
 }
@@ -109,8 +111,10 @@ export const NfoDiffModal: React.FC<NfoDiffModalProps> = ({
   isOpen,
   onClose,
   filePath,
-  cleanTrailer,
-  cleanActorThumb,
+  cleanTrailer = true,
+  cleanActorThumb = true,
+  cleanArt = false,
+  rules,
   cachedData,
   onDataLoaded,
 }) => {
@@ -160,6 +164,8 @@ export const NfoDiffModal: React.FC<NfoDiffModalProps> = ({
             path: filePath,
             clean_trailer: cleanTrailer,
             clean_actor_thumb: cleanActorThumb,
+            clean_art: cleanArt,
+            rules: rules,
           }),
         });
 
@@ -234,7 +240,7 @@ export const NfoDiffModal: React.FC<NfoDiffModalProps> = ({
                   {filePath ? filePath.split(/[/\\]/).pop() : "文件对比预览"}
                 </h3>
                 {data && (
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                     {data.trailer_removed > 0 && (
                       <span className="flex items-center gap-1 text-[11px] bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-full font-medium">
                         <Film size={12} />
@@ -247,6 +253,26 @@ export const NfoDiffModal: React.FC<NfoDiffModalProps> = ({
                         thumb -{data.actor_thumb_removed}
                       </span>
                     )}
+                    {Boolean(data.art_removed && data.art_removed > 0) && (
+                      <span className="flex items-center gap-1 text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
+                        art -{data.art_removed}
+                      </span>
+                    )}
+                    {data.rule_hits &&
+                      Object.entries(data.rule_hits)
+                        .filter(
+                          ([k, v]) =>
+                            v > 0 &&
+                            !["preset_trailer", "preset_actor_thumb", "preset_art"].includes(k)
+                        )
+                        .map(([k, v]) => (
+                          <span
+                            key={k}
+                            className="flex items-center gap-1 text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-medium"
+                          >
+                            {k} x{v}
+                          </span>
+                        ))}
                     {!data.changed && (
                       <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                         文件无需修改

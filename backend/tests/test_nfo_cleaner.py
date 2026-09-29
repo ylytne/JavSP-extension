@@ -288,3 +288,130 @@ def test_clean_nfo_cli(tmp_path: Path, capsys: pytest.CaptureFixture):
     content = nfo_file.read_text(encoding="utf-8")
     assert "<trailer>" not in content
     assert "<thumb>xxx.jpg</thumb>" in content
+
+
+JELLYFIN_POLLUTED_NFO = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+  <plot>plot</plot>
+  <lockdata>false</lockdata>
+  <title>SSIS-135 纯情女友</title>
+  <originaltitle>純情彼女</originaltitle>
+  <director>西川</director>
+  <genre>有码</genre>
+  <numid>SSIS-135</numid>
+  <art>
+    <poster>C:/Videos/SSIS-135/poster.jpg</poster>
+    <fanart>C:/Videos/SSIS-135/fanart.jpg</fanart>
+  </art>
+  <actor>
+    <name>相沢みなみ</name>
+    <thumb>C:/Videos/SSIS-135/folder.jpg</thumb>
+  </actor>
+  <fileinfo>
+    <streamdetails>
+      <video><codec>h264</codec></video>
+    </streamdetails>
+  </fileinfo>
+</movie>
+"""
+
+
+def test_clean_art_and_fileinfo():
+    """测试清理 Jellyfin 的 <art> 和 <fileinfo> 节点。"""
+    from app.core.nfo_cleaner import RewriteRule
+
+    rules = [
+        RewriteRule(id="art", name="清理 art", rule_type="remove_node", target="<art></art>"),
+        RewriteRule(id="fileinfo", name="清理 fileinfo", rule_type="remove_node", target="//fileinfo"),
+    ]
+    res = clean_nfo_content(JELLYFIN_POLLUTED_NFO, rules=rules)
+    assert res.total_hits == 2
+    assert "<art>" not in res.xml_text
+    assert "poster.jpg" not in res.xml_text
+    assert "<fileinfo>" not in res.xml_text
+    assert "<streamdetails>" not in res.xml_text
+    # 其它节点保留
+    assert "<numid>SSIS-135</numid>" in res.xml_text
+    assert "<name>相沢みなみ</name>" in res.xml_text
+
+
+def test_replace_node_numid_to_uniqueid():
+    """测试将 Jellyfin 的 <numid> 转换为标准 <uniqueid type="num" default="true">。"""
+    from app.core.nfo_cleaner import RewriteRule
+
+    rules = [
+        RewriteRule(
+            id="numid_fix",
+            name="还原 uniqueid",
+            rule_type="replace_node",
+            target="<numid>",
+            replacement='<uniqueid type="num" default="true">',
+        ),
+    ]
+    res = clean_nfo_content(JELLYFIN_POLLUTED_NFO, rules=rules)
+    assert res.total_hits == 1
+    assert "<numid>" not in res.xml_text
+    assert '<uniqueid type="num" default="true">SSIS-135</uniqueid>' in res.xml_text
+
+
+def test_replace_text_scoped_vs_global():
+    """测试文本替换：限定在演员名 <actor><name> 与全局替换。"""
+    from app.core.nfo_cleaner import RewriteRule
+
+    # 1. 限定在 //actor/name
+    rule_scoped = [
+        RewriteRule(
+            id="rename_actress",
+            name="演员更名",
+            rule_type="replace_text",
+            target="相沢みなみ",
+            replacement="相澤南",
+            scope="//actor/name",
+        )
+    ]
+    res = clean_nfo_content(JELLYFIN_POLLUTED_NFO, rules=rule_scoped)
+    assert res.total_hits == 1
+    assert "<name>相澤南</name>" in res.xml_text
+    assert "<name>相沢みなみ</name>" not in res.xml_text
+
+    # 2. 文本在其它非 scope 节点出现时不应被误替换
+    nfo_with_plot = "<movie><plot>相沢みなみ的作品</plot><actor><name>相沢みなみ</name></actor></movie>"
+    res2 = clean_nfo_content(nfo_with_plot, rules=rule_scoped)
+    assert res2.total_hits == 1
+    assert "<name>相澤南</name>" in res2.xml_text
+    assert "<plot>相沢みなみ的作品</plot>" in res2.xml_text  # plot 得到保护未被误伤
+
+
+def test_append_node_actor_type():
+    """测试向 <actor> 节点追加 <type>Actor</type> 及其防重机制。"""
+    from app.core.nfo_cleaner import RewriteRule
+
+    nfo = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+  <actor>
+    <name>actress 1</name>
+  </actor>
+  <actor>
+    <name>actress 2</name>
+    <type>Actor</type>
+  </actor>
+</movie>
+"""
+    rule = [
+        RewriteRule(
+            id="actor_type",
+            name="补充演员类型",
+            rule_type="append_node",
+            target="<actor></actor>",
+            replacement="<type>Actor</type>",
+        )
+    ]
+    res = clean_nfo_content(nfo, rules=rule)
+    # actress 1 缺失，追加 1 次；actress 2 已有且相同，不重复追加
+    assert res.total_hits == 1
+    assert "<name>actress 1</name>\n    <type>Actor</type>" in res.xml_text
+    assert "<name>actress 2</name>\n    <type>Actor</type>" in res.xml_text
+    # 验证全文只有 2 个 <type>Actor</type>
+    assert res.xml_text.count("<type>Actor</type>") == 2
+
+

@@ -446,9 +446,9 @@ def test_actress_nfo_without_thumb_and_no_actors_dir(tmp_path: Path):
     )
     xml_text = generate_nfo_content(info)
     assert "<thumb>" not in xml_text
-    assert "<actor>\n    <name>相沢みなみ</name>\n  </actor>" in xml_text
-    assert "<actor>\n    <name>涼森れむ</name>\n  </actor>" in xml_text
-    assert "<actor>\n    <name>无头像女优</name>\n  </actor>" in xml_text
+    assert "<actor>\n    <name>相沢みなみ</name>\n    <type>Actor</type>\n  </actor>" in xml_text
+    assert "<actor>\n    <name>涼森れむ</name>\n    <type>Actor</type>\n  </actor>" in xml_text
+    assert "<actor>\n    <name>无头像女优</name>\n    <type>Actor</type>\n  </actor>" in xml_text
     # 彻底杜绝外网 URL
     assert "http://" not in xml_text and "https://" not in xml_text
 
