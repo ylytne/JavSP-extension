@@ -3,9 +3,14 @@ import { FullAppConfig } from "../types";
 import {
   FOLDER_VARS,
   BASENAME_VARS,
+  NFO_BASENAME_VARS,
+  COVER_BASENAME_VARS,
+  FANART_BASENAME_VARS,
   VariablePillSelector,
   FolderBreadcrumbPreview,
   DiskStructurePreview,
+  formatTemplate,
+  TEMPLATE_SAMPLE_MOVIE,
 } from "../components/TemplatePreview";
 
 interface SummarizerTabProps {
@@ -24,6 +29,27 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
       } else if (field === "basename_pattern") {
         cfg.summarizer.path.basename_pattern += varName;
       }
+      return cfg;
+    });
+  };
+
+  const insertNfoVar = (varName: string) => {
+    updateForm((cfg) => {
+      cfg.summarizer.nfo.basename_pattern = (cfg.summarizer.nfo.basename_pattern || "") + varName;
+      return cfg;
+    });
+  };
+
+  const insertCoverVar = (varName: string) => {
+    updateForm((cfg) => {
+      cfg.summarizer.cover.basename_pattern = (cfg.summarizer.cover.basename_pattern || "") + varName;
+      return cfg;
+    });
+  };
+
+  const insertFanartVar = (varName: string) => {
+    updateForm((cfg) => {
+      cfg.summarizer.fanart.basename_pattern = (cfg.summarizer.fanart.basename_pattern || "") + varName;
       return cfg;
     });
   };
@@ -190,12 +216,314 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
           />
         </div>
 
+        {/* NFO 文件命名规则 */}
+        <div className="space-y-2 pt-3 border-t border-slate-200/70">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div>
+              <label className="text-xs font-bold text-slate-700">
+                NFO 文件命名规则 (nfo.basename_pattern)
+              </label>
+              <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                控制落盘时 NFO 文件的名称（无需输入 <code className="text-indigo-600 font-mono">.nfo</code> 扩展名）。推荐保持 <code className="text-indigo-600 font-mono font-semibold">{"{filename}"}</code> 与视频主文件完全同名。
+              </p>
+            </div>
+            <VariablePillSelector
+              vars={NFO_BASENAME_VARS}
+              onInsert={insertNfoVar}
+            />
+          </div>
+          <input
+            type="text"
+            value={formConfig.summarizer.nfo.basename_pattern ?? "{filename}"}
+            onChange={(e) =>
+              updateForm((cfg) => {
+                cfg.summarizer.nfo.basename_pattern = e.target.value;
+                return cfg;
+              })
+            }
+            placeholder="{filename}"
+            className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 select-none">推荐预设:</span>
+              <button
+                type="button"
+                onClick={() =>
+                  updateForm((cfg) => {
+                    cfg.summarizer.nfo.basename_pattern = "{filename}";
+                    return cfg;
+                  })
+                }
+                className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                title="重置为与视频主文件完全同名"
+              >
+                重置为同名 ({"{filename}"})
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  updateForm((cfg) => {
+                    cfg.summarizer.nfo.basename_pattern = "movie";
+                    return cfg;
+                  })
+                }
+                className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                title="切换为 Kodi 传统单目录 movie.nfo"
+              >
+                movie.nfo
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  updateForm((cfg) => {
+                    cfg.summarizer.nfo.basename_pattern = "{num}";
+                    return cfg;
+                  })
+                }
+                className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                title="固定使用番号命名 (如 IPX-177.nfo)"
+              >
+                {"{num}"}
+              </button>
+            </div>
+            {/* 实时效果预览条 */}
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-white px-2.5 py-1 rounded border border-slate-200">
+              <span className="font-semibold text-slate-700">NFO 落盘效果：</span>
+              <code className="text-emerald-700 font-mono font-bold">
+                {(
+                  formatTemplate(
+                    formConfig.summarizer.nfo.basename_pattern?.trim() || "{filename}",
+                    { ...TEMPLATE_SAMPLE_MOVIE, filename: "IPX-177", basename: "IPX-177" }
+                  ) || "IPX-177"
+                ) + ".nfo"}
+              </code>
+            </div>
+          </div>
+        </div>
+
+        {/* 海报与背景图命名规则 */}
+        <div className="space-y-3 pt-3 border-t border-slate-200/70">
+          <div>
+            <label className="text-xs font-bold text-slate-800">
+              海报与背景图命名规则 (cover & fanart basename_pattern)
+            </label>
+            <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+              自定义落盘生成的海报（竖版裁剪海报）与背景图（横版展开图）的文件名，无需输入 <code className="text-indigo-600 font-mono">.jpg</code> 扩展名。
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* 1. 竖版海报命名规则 */}
+            <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 space-y-2.5 overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <span className="text-xs font-bold text-slate-700">
+                  竖版裁剪海报 (cover.basename_pattern)
+                </span>
+                <VariablePillSelector
+                  vars={COVER_BASENAME_VARS}
+                  onInsert={insertCoverVar}
+                />
+              </div>
+
+              {/* 输入框独占一行，保证有足够宽度 */}
+              <input
+                type="text"
+                value={formConfig.summarizer.cover.basename_pattern ?? "poster"}
+                onChange={(e) =>
+                  updateForm((cfg) => {
+                    cfg.summarizer.cover.basename_pattern = e.target.value;
+                    return cfg;
+                  })
+                }
+                placeholder="poster"
+                className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+
+              {/* 快捷预设按钮独立成行，支持弹性换行 */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] text-slate-400 select-none">推荐预设:</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateForm((cfg) => {
+                      cfg.summarizer.cover.basename_pattern = "poster";
+                      return cfg;
+                    })
+                  }
+                  className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                  title="Kodi/Emby 标准推荐 (固定 poster.jpg)"
+                >
+                  poster
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateForm((cfg) => {
+                      cfg.summarizer.cover.basename_pattern = "{num}-poster";
+                      return cfg;
+                    })
+                  }
+                  className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                  title="番号关联海报 (如 IPX-177-poster.jpg)"
+                >
+                  {"{num}-poster"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateForm((cfg) => {
+                      cfg.summarizer.cover.basename_pattern = "{filename}-poster";
+                      return cfg;
+                    })
+                  }
+                  className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                  title="跟随视频最终文件名关联海报 (如 IPX-177-poster.jpg)"
+                >
+                  {"{filename}-poster"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateForm((cfg) => {
+                      cfg.summarizer.cover.basename_pattern = "{filename}";
+                      return cfg;
+                    })
+                  }
+                  className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                  title="与视频最终主文件完全同名 (如 IPX-177.jpg)"
+                >
+                  {"{filename} (同名)"}
+                </button>
+              </div>
+
+              {/* 实时效果预览条 */}
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-white px-2.5 py-1.5 rounded border border-slate-200">
+                <span className="font-semibold text-slate-700 shrink-0">海报落盘效果：</span>
+                <code className="text-blue-700 font-mono font-bold truncate">
+                  {(
+                    (formConfig.summarizer.cover.basename_pattern?.includes("{") &&
+                    formConfig.summarizer.cover.basename_pattern?.includes("}"))
+                      ? (formatTemplate(
+                          formConfig.summarizer.cover.basename_pattern,
+                          { ...TEMPLATE_SAMPLE_MOVIE, filename: "IPX-177", basename: "IPX-177" }
+                        ) || "poster")
+                      : (formConfig.summarizer.cover.basename_pattern?.trim() || "poster")
+                  ) + ".jpg"}
+                </code>
+              </div>
+            </div>
+
+            {/* 2. 横版背景图命名规则 */}
+            <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 space-y-2.5 overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <span className="text-xs font-bold text-slate-700">
+                  横版背景图 (fanart.basename_pattern)
+                </span>
+                <VariablePillSelector
+                  vars={FANART_BASENAME_VARS}
+                  onInsert={insertFanartVar}
+                />
+              </div>
+
+              {/* 输入框独占一行，保证有足够宽度 */}
+              <input
+                type="text"
+                value={formConfig.summarizer.fanart.basename_pattern ?? "fanart"}
+                onChange={(e) =>
+                  updateForm((cfg) => {
+                    cfg.summarizer.fanart.basename_pattern = e.target.value;
+                    return cfg;
+                  })
+                }
+                placeholder="fanart"
+                className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+
+              {/* 快捷预设按钮独立成行，支持弹性换行 */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] text-slate-400 select-none">推荐预设:</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateForm((cfg) => {
+                      cfg.summarizer.fanart.basename_pattern = "fanart";
+                      return cfg;
+                    })
+                  }
+                  className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                  title="Kodi/Emby 标准推荐 (固定 fanart.jpg)"
+                >
+                  fanart
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateForm((cfg) => {
+                      cfg.summarizer.fanart.basename_pattern = "{num}-fanart";
+                      return cfg;
+                    })
+                  }
+                  className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                  title="番号关联背景图 (如 IPX-177-fanart.jpg)"
+                >
+                  {"{num}-fanart"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateForm((cfg) => {
+                      cfg.summarizer.fanart.basename_pattern = "{filename}-fanart";
+                      return cfg;
+                    })
+                  }
+                  className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                  title="跟随视频最终文件名关联背景图 (如 IPX-177-fanart.jpg)"
+                >
+                  {"{filename}-fanart"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateForm((cfg) => {
+                      cfg.summarizer.fanart.basename_pattern = "{filename}-thumb";
+                      return cfg;
+                    })
+                  }
+                  className="px-2 py-1 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
+                  title="Jellyfin/Emby 缩略图规范 (如 IPX-177-thumb.jpg)"
+                >
+                  {"{filename}-thumb"}
+                </button>
+              </div>
+
+              {/* 实时效果预览条 */}
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-white px-2.5 py-1.5 rounded border border-slate-200">
+                <span className="font-semibold text-slate-700 shrink-0">背景图落盘效果：</span>
+                <code className="text-indigo-700 font-mono font-bold truncate">
+                  {(
+                    (formConfig.summarizer.fanart.basename_pattern?.includes("{") &&
+                    formConfig.summarizer.fanart.basename_pattern?.includes("}"))
+                      ? (formatTemplate(
+                          formConfig.summarizer.fanart.basename_pattern,
+                          { ...TEMPLATE_SAMPLE_MOVIE, filename: "IPX-177", basename: "IPX-177" }
+                        ) || "fanart")
+                      : (formConfig.summarizer.fanart.basename_pattern?.trim() || "fanart")
+                  ) + ".jpg"}
+                </code>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* 综合落盘文件结构动态模拟效果卡片 */}
         <DiskStructurePreview
           folderPattern={formConfig.summarizer.path.output_folder_pattern}
           basenamePattern={formConfig.summarizer.path.basename_pattern}
           baseDirectory={formConfig.scanner.input_directory}
           nfoBasenamePattern={formConfig.summarizer.nfo?.basename_pattern}
+          coverBasenamePattern={formConfig.summarizer.cover?.basename_pattern}
+          fanartBasenamePattern={formConfig.summarizer.fanart?.basename_pattern}
         />
       </div>
 
@@ -309,7 +637,7 @@ export const SummarizerTab: React.FC<SummarizerTabProps> = ({ formConfig, update
             <div>
               <div className="text-xs font-medium text-slate-700">外挂字幕自动标记为中字 (-C)</div>
               <div className="text-[11px] text-slate-400 mt-0.5">
-                检测到同名外挂字幕时，自动将影片标记为中文字幕并在番号及文件名后追加 -C，生成中字水印海报
+                检测到同名外挂字幕时，自动将影片标记为中文字幕并在番号及文件名后追加 -C，生成中字水印海报(如开启)
               </div>
             </div>
             <input

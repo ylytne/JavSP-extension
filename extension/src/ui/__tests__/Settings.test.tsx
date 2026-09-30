@@ -312,6 +312,30 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
     expect(container.textContent).toContain("影片标题 (title)");
   });
 
+  it("SummarizerTab 应能正确展示并配置 NFO 文件命名规则及预设按钮", async () => {
+    let currentConfig = JSON.parse(JSON.stringify(mockConfig));
+    const updateForm = vi.fn((updater) => {
+      currentConfig = updater(currentConfig);
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<SummarizerTab formConfig={currentConfig} updateForm={updateForm} />);
+    });
+
+    expect(container.textContent).toContain("NFO 文件命名规则");
+    expect(container.textContent).toContain("NFO 落盘效果：");
+
+    // 点击切换为 movie.nfo 预设按钮
+    const movieBtn = container.querySelector("button[title='切换为 Kodi 传统单目录 movie.nfo']") as HTMLButtonElement;
+    expect(movieBtn).not.toBeNull();
+    await act(async () => {
+      movieBtn.click();
+    });
+    expect(updateForm).toHaveBeenCalled();
+    expect(currentConfig.summarizer.nfo.basename_pattern).toBe("movie");
+  });
+
   it("NfoTab 应能正确渲染标题模板、剧情简介清理并支持删除规则", async () => {
     let currentConfig = JSON.parse(JSON.stringify(mockConfig));
     currentConfig.summarizer.nfo.clean_plot = true;
@@ -326,20 +350,10 @@ describe("Settings 模块化组件与 Tab 渲染测试", () => {
       root.render(<NfoTab formConfig={currentConfig} updateForm={updateForm} />);
     });
 
-    expect(container.textContent).toContain("NFO 文件命名规则");
     expect(container.textContent).toContain("NFO 影片标题模板");
     expect(container.textContent).toContain("剧情简介 (Plot) 清理设置");
     expect(container.textContent).toContain("清理简介开头的番号前缀");
     expect(container.textContent).toContain(" - airav.io");
-
-    // 点击切换为 movie.nfo 按钮
-    const movieBtn = container.querySelector("button[title='切换为 Kodi 经典 movie.nfo']") as HTMLButtonElement;
-    expect(movieBtn).not.toBeNull();
-    await act(async () => {
-      movieBtn.click();
-    });
-    expect(updateForm).toHaveBeenCalled();
-    expect(currentConfig.summarizer.nfo.basename_pattern).toBe("movie");
 
     // 找到删除按钮并点击
     const deleteBtn = container.querySelector("button[title='删除该规则']") as HTMLButtonElement;

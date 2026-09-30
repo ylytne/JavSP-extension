@@ -159,6 +159,22 @@ export const NFO_TITLE_VARS: TemplateVariableInfo[] = [
   { token: "{publisher}", label: "发行商", example: "IDEA POCKET", description: "影片发行商" },
 ];
 
+export const COVER_BASENAME_VARS: TemplateVariableInfo[] = [
+  { token: "{filename}", label: "视频主名", example: "IPX-177", description: "跟随视频最终主文件名（如 {filename}-poster）" },
+  { token: "{num}", label: "番号", example: "IPX-177", description: "标准番号（如 {num}-poster）" },
+  { token: "{title}", label: "标题", example: "纯情女友大变身...", description: "影片标题" },
+  { token: "{actress}", label: "女优", example: "相沢みなみ", description: "主要女优" },
+  { token: "poster", label: "poster", example: "poster", description: "Kodi/Emby 标准规范（固定 poster.jpg）" },
+];
+
+export const FANART_BASENAME_VARS: TemplateVariableInfo[] = [
+  { token: "{filename}", label: "视频主名", example: "IPX-177", description: "跟随视频最终主文件名（如 {filename}-fanart）" },
+  { token: "{num}", label: "番号", example: "IPX-177", description: "标准番号（如 {num}-fanart）" },
+  { token: "{title}", label: "标题", example: "纯情女友大变身...", description: "影片标题" },
+  { token: "{actress}", label: "女优", example: "相沢みなみ", description: "主要女优" },
+  { token: "fanart", label: "fanart", example: "fanart", description: "Kodi/Emby 标准规范（固定 fanart.jpg）" },
+];
+
 interface VariablePillSelectorProps {
   vars: TemplateVariableInfo[];
   onInsert: (token: string) => void;
@@ -265,7 +281,9 @@ interface DiskStructurePreviewProps {
   folderPattern: string;
   basenamePattern: string;
   baseDirectory?: string | null;
-  nfoBasenamePattern?: string;
+  nfoBasenamePattern?: string | null;
+  coverBasenamePattern?: string | null;
+  fanartBasenamePattern?: string | null;
 }
 
 /**
@@ -276,6 +294,8 @@ export const DiskStructurePreview: React.FC<DiskStructurePreviewProps> = ({
   basenamePattern,
   baseDirectory,
   nfoBasenamePattern,
+  coverBasenamePattern,
+  fanartBasenamePattern,
 }) => {
   const pathInfo = parsePathSegments(folderPattern, baseDirectory);
   const formattedBasename = formatTemplate(basenamePattern) || "IPX-177";
@@ -286,6 +306,19 @@ export const DiskStructurePreview: React.FC<DiskStructurePreviewProps> = ({
     basename: formattedBasename,
   };
   const formattedNfoBasename = formatTemplate(effectiveNfoPattern, nfoSampleData) || formattedBasename;
+
+  // 竖版裁剪海报：若未传递或为 null 则保持兼容旧预览的 {filename}-poster 表现；若指定了则按模板或字面量格式化
+  const effectiveCoverPattern = coverBasenamePattern != null ? coverBasenamePattern.trim() : "{filename}-poster";
+  const formattedCoverBasename = (effectiveCoverPattern.includes("{") && effectiveCoverPattern.includes("}"))
+    ? (formatTemplate(effectiveCoverPattern, nfoSampleData) || "poster")
+    : (effectiveCoverPattern || "poster");
+
+  // 横版背景图：若未传递或为 null 时格式化为 fanart.jpg
+  const effectiveFanartPattern = fanartBasenamePattern != null ? fanartBasenamePattern.trim() : "fanart";
+  const formattedFanartBasename = (effectiveFanartPattern.includes("{") && effectiveFanartPattern.includes("}"))
+    ? (formatTemplate(effectiveFanartPattern, nfoSampleData) || "fanart")
+    : (effectiveFanartPattern || "fanart");
+
   const cleanFolder = pathInfo.fullDisplayPath.replace(/[/\\]+$/, "");
   const baseDisplay = baseDirectory?.trim() || "D:/download";
 
@@ -296,7 +329,11 @@ export const DiskStructurePreview: React.FC<DiskStructurePreviewProps> = ({
           <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
           <span className="text-slate-800 font-bold">落盘文件结构动态模拟效果</span>
         </div>
-        <span className="text-[10px] text-slate-400 font-normal">基于当前文件夹与主文件名模板计算</span>
+        {!pathInfo.isAbsolute && (
+          <span className="text-[10px] text-slate-400 font-normal">
+            （假设扫描路径为{baseDisplay}/）
+          </span>
+        )}
       </div>
 
       <div className="space-y-1 font-mono text-[11px] bg-white p-2.5 rounded border border-slate-200 text-slate-700 overflow-x-auto">
@@ -348,9 +385,17 @@ export const DiskStructurePreview: React.FC<DiskStructurePreviewProps> = ({
           <div className="flex items-center justify-between gap-2 hover:bg-slate-50 px-1 py-0.5 rounded">
             <div className="flex items-center gap-1.5 truncate">
               <Image className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span className="text-slate-700">{formattedBasename}-poster.jpg</span>
+              <span className="text-slate-700">{formattedCoverBasename}.jpg</span>
             </div>
-            <span className="text-[10px] text-slate-400 shrink-0 font-sans">裁剪海报封面（可附加 -C/-U 角标）</span>
+            <span className="text-[10px] text-slate-400 shrink-0 font-sans">裁剪竖版海报（可附加 -C/-U 角标）</span>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 hover:bg-slate-50 px-1 py-0.5 rounded">
+            <div className="flex items-center gap-1.5 truncate">
+              <Image className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="text-slate-700">{formattedFanartBasename}.jpg</span>
+            </div>
+            <span className="text-[10px] text-slate-400 shrink-0 font-sans">横版背景图（Fanart / Backdrop）</span>
           </div>
 
           <div className="flex items-center justify-between gap-2 hover:bg-slate-50 px-1 py-0.5 rounded">

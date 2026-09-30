@@ -3,7 +3,6 @@ import { Plus, Trash2, HelpCircle, FileText, AlertTriangle, BookmarkCheck } from
 import { FullAppConfig } from "../types";
 import {
   NFO_TITLE_VARS,
-  NFO_BASENAME_VARS,
   VariablePillSelector,
   MediaTitlePreview,
   formatTemplate,
@@ -17,13 +16,6 @@ interface NfoTabProps {
 
 export const NfoTab: React.FC<NfoTabProps> = ({ formConfig, updateForm }) => {
   const [newPattern, setNewPattern] = useState("");
-
-  const insertBasenameVar = (varName: string) => {
-    updateForm((cfg) => {
-      cfg.summarizer.nfo.basename_pattern = (cfg.summarizer.nfo.basename_pattern || "") + varName;
-      return cfg;
-    });
-  };
 
   const insertTemplateVar = (varName: string) => {
     updateForm((cfg) => {
@@ -60,84 +52,7 @@ export const NfoTab: React.FC<NfoTabProps> = ({ formConfig, updateForm }) => {
 
   return (
     <div className="space-y-4">
-      {/* 1. NFO 文件名命名规则配置卡片 */}
-      <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-3">
-        <div className="space-y-1.5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <div>
-              <label className="text-xs font-bold text-slate-700">
-                NFO 文件命名规则 (nfo.basename_pattern)
-              </label>
-              <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                控制落盘时 NFO 文件的名称（无需写 <code className="text-indigo-600 font-mono">.nfo</code> 扩展名）。推荐保持 <code className="text-indigo-600 font-mono font-semibold">{"{filename}"}</code> 与视频主文件完全同名。
-              </p>
-            </div>
-            <VariablePillSelector
-              vars={NFO_BASENAME_VARS}
-              onInsert={insertBasenameVar}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={formConfig.summarizer.nfo.basename_pattern ?? "{filename}"}
-              onChange={(e) =>
-                updateForm((cfg) => {
-                  cfg.summarizer.nfo.basename_pattern = e.target.value;
-                  return cfg;
-                })
-              }
-              placeholder="{filename}"
-              className="flex-1 text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() =>
-                  updateForm((cfg) => {
-                    cfg.summarizer.nfo.basename_pattern = "{filename}";
-                    return cfg;
-                  })
-                }
-                className="px-2 py-1.5 text-[11px] bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded border border-indigo-200 font-medium transition cursor-pointer select-none"
-                title="重置为与视频严格同名"
-              >
-                重置为同名
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  updateForm((cfg) => {
-                    cfg.summarizer.nfo.basename_pattern = "movie";
-                    return cfg;
-                  })
-                }
-                className="px-2 py-1.5 text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-200 font-medium transition cursor-pointer select-none"
-                title="切换为 Kodi 经典 movie.nfo"
-              >
-                movie.nfo
-              </button>
-            </div>
-          </div>
-          {/* 实时效果预览条 */}
-          <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-white p-2 rounded border border-slate-200">
-            <span className="font-semibold text-slate-700">落盘文件名模拟效果：</span>
-            <code className="text-emerald-700 font-mono font-bold">
-              {(
-                formatTemplate(
-                  formConfig.summarizer.nfo.basename_pattern?.trim() || "{filename}",
-                  { ...TEMPLATE_SAMPLE_MOVIE, filename: "IPX-177", basename: "IPX-177" }
-                ) || "IPX-177"
-              ) + ".nfo"}
-            </code>
-            <span className="text-slate-400 text-[10px]">
-              （与视频主文件同名）
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. NFO 影片标题模板配置卡片 */}
+      {/* 1. NFO 影片标题模板配置卡片 */}
       <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200 space-y-3">
         <div className="space-y-1.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
@@ -377,7 +292,7 @@ export const NfoTab: React.FC<NfoTabProps> = ({ formConfig, updateForm }) => {
             </li>
           </ul>
           <p className="text-[10.5px] text-amber-800 pt-0.5 font-medium">
-            💡 <strong>强烈建议保持禁用</strong>。直接抓取预告片/全片视频到本地不是本项目的目标，本项目的目标仅限于刮削信息。如需预告片，推荐在影片同级目录下手动放置本地离线文件（如 <code className="font-mono bg-amber-100/60 px-1 py-0.5 rounded">movie-trailer.mp4</code>）。
+            💡 <strong>强烈建议保持禁用</strong>。
           </p>
         </div>
       </div>

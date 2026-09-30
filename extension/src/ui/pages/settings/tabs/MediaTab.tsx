@@ -9,7 +9,6 @@ interface MediaTabProps {
 export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) => {
   return (
     <div className="space-y-4">
-
       {/* 海报与角标 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 space-y-2">
@@ -28,7 +27,7 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formConfig, updateForm }) =>
             />
           </div>
           <p className="text-[11px] text-slate-400">
-            在生成的 poster.jpg 左上角叠加 -C（中文字幕）或 -U（无码流出）半透明角标标识。
+            在生成的竖版海报图片左上角叠加 -C（中文字幕）或 -U（无码流出）半透明角标标识。
           </p>
         </div>
 

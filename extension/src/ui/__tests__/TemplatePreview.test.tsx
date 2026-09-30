@@ -330,5 +330,90 @@ describe("TemplatePreview 核心函数与组件测试", () => {
       expect(updateForm).toHaveBeenCalled();
       expect(currentCfg.summarizer.nfo.title_pattern).toContain("{censor}");
     });
+
+    it("SummarizerTab 应渲染海报与背景图命名配置及预设按钮，并能触发更新", async () => {
+      let currentCfg = JSON.parse(JSON.stringify(mockFullConfig));
+      const updateForm = vi.fn((updater) => {
+        currentCfg = updater(currentCfg);
+      });
+      const root = createRoot(container);
+
+      await act(async () => {
+        root.render(<SummarizerTab formConfig={currentCfg} updateForm={updateForm} />);
+      });
+
+      // 验证渲染了命名配置卡片与说明文字
+      expect(container.textContent).toContain("海报与背景图命名规则");
+      expect(container.textContent).toContain("竖版裁剪海报 (cover.basename_pattern)");
+      expect(container.textContent).toContain("横版背景图 (fanart.basename_pattern)");
+      expect(container.textContent).toContain("海报落盘效果：");
+      expect(container.textContent).toContain("背景图落盘效果：");
+
+      // 找到海报 {num}-poster 预设按钮
+      const numPosterBtn = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "{num}-poster"
+      );
+      expect(numPosterBtn).toBeDefined();
+
+      await act(async () => {
+        numPosterBtn?.click();
+      });
+
+      expect(updateForm).toHaveBeenCalled();
+      expect(currentCfg.summarizer.cover.basename_pattern).toBe("{num}-poster");
+
+      // 找到背景图 {num}-fanart 预设按钮
+      const numFanartBtn = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "{num}-fanart"
+      );
+      expect(numFanartBtn).toBeDefined();
+
+      await act(async () => {
+        numFanartBtn?.click();
+      });
+
+      expect(updateForm).toHaveBeenCalled();
+      expect(currentCfg.summarizer.fanart.basename_pattern).toBe("{num}-fanart");
+    });
+  });
+
+  describe("DiskStructurePreview 动态海报与背景图命名模拟", () => {
+    it("当配置 coverBasenamePattern 与 fanartBasenamePattern 时应准确渲染对应文件名", async () => {
+      const root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <DiskStructurePreview
+            folderPattern="{actress}/{num}"
+            basenamePattern="{num}"
+            coverBasenamePattern="{num}-poster"
+            fanartBasenamePattern="{num}-fanart"
+          />
+        );
+      });
+
+      expect(container.textContent).toContain(`${TEMPLATE_SAMPLE_MOVIE.num}-poster.jpg`);
+      expect(container.textContent).toContain(`${TEMPLATE_SAMPLE_MOVIE.num}-fanart.jpg`);
+      expect(container.textContent).toContain("裁剪竖版海报");
+      expect(container.textContent).toContain("横版背景图");
+    });
+
+    it("当配置为 Kodi 标准 poster 与 fanart 时应直接生成 poster.jpg 与 fanart.jpg", async () => {
+      const root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <DiskStructurePreview
+            folderPattern="{actress}/{num}"
+            basenamePattern="{num}"
+            coverBasenamePattern="poster"
+            fanartBasenamePattern="fanart"
+          />
+        );
+      });
+
+      expect(container.textContent).toContain("poster.jpg");
+      expect(container.textContent).toContain("fanart.jpg");
+    });
   });
 });
