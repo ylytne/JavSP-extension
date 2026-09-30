@@ -77,13 +77,14 @@ def test_organize_movie_with_single_subtitle_exact_match(tmp_path: Path):
         files=[str(video)],
         metadata=meta,
         base_output_dir=out_base,
+        hard_link=False,
     )
 
     p_final = Path(final_dir)
     assert p_final.exists()
-    assert (p_final / "IPX-111.mp4").is_file()
-    assert (p_final / "IPX-111.srt").is_file()
-    assert (p_final / "IPX-111.srt").read_text(encoding="utf-8") == "sub content"
+    assert (p_final / "IPX-111-C.mp4").is_file()
+    assert (p_final / "IPX-111-C.srt").is_file()
+    assert (p_final / "IPX-111-C.srt").read_text(encoding="utf-8") == "sub content"
 
     # 源文件已被移走，源文件夹已清空并自动删除
     assert not video.exists()
@@ -114,11 +115,11 @@ def test_organize_movie_with_language_tag_subtitles(tmp_path: Path):
         base_output_dir=tmp_path / "out",
     )
     p_final = Path(final_dir)
-    assert (p_final / "IPX-222.mkv").is_file()
-    assert (p_final / "IPX-222.zh-CN.srt").is_file()
-    assert (p_final / "IPX-222.zh-CN.srt").read_text(encoding="utf-8") == "zh srt"
-    assert (p_final / "IPX-222.chs.ass").is_file()
-    assert (p_final / "IPX-222.chs.ass").read_text(encoding="utf-8") == "chs ass"
+    assert (p_final / "IPX-222-C.mkv").is_file()
+    assert (p_final / "IPX-222-C.zh-CN.srt").is_file()
+    assert (p_final / "IPX-222-C.zh-CN.srt").read_text(encoding="utf-8") == "zh srt"
+    assert (p_final / "IPX-222-C.chs.ass").is_file()
+    assert (p_final / "IPX-222-C.chs.ass").read_text(encoding="utf-8") == "chs ass"
 
 
 def test_organize_movie_multi_cd_subtitles(tmp_path: Path):
@@ -147,12 +148,12 @@ def test_organize_movie_multi_cd_subtitles(tmp_path: Path):
         base_output_dir=tmp_path / "out",
     )
     p_final = Path(final_dir)
-    assert (p_final / "IPX-333-CD1.mp4").is_file()
-    assert (p_final / "IPX-333-CD2.mp4").is_file()
-    assert (p_final / "IPX-333-CD1.srt").is_file()
-    assert (p_final / "IPX-333-CD1.srt").read_text(encoding="utf-8") == "sub1"
-    assert (p_final / "IPX-333-CD2.srt").is_file()
-    assert (p_final / "IPX-333-CD2.srt").read_text(encoding="utf-8") == "sub2"
+    assert (p_final / "IPX-333-C-CD1.mp4").is_file()
+    assert (p_final / "IPX-333-C-CD2.mp4").is_file()
+    assert (p_final / "IPX-333-C-CD1.srt").is_file()
+    assert (p_final / "IPX-333-C-CD1.srt").read_text(encoding="utf-8") == "sub1"
+    assert (p_final / "IPX-333-C-CD2.srt").is_file()
+    assert (p_final / "IPX-333-C-CD2.srt").read_text(encoding="utf-8") == "sub2"
 
 
 def test_organize_movie_multi_cd_shared_subtitle(tmp_path: Path):
@@ -179,8 +180,8 @@ def test_organize_movie_multi_cd_shared_subtitle(tmp_path: Path):
         base_output_dir=tmp_path / "out",
     )
     p_final = Path(final_dir)
-    assert (p_final / "IPX-444.srt").is_file()
-    assert (p_final / "IPX-444.srt").read_text(encoding="utf-8") == "shared sub"
+    assert (p_final / "IPX-444-C.srt").is_file()
+    assert (p_final / "IPX-444-C.srt").read_text(encoding="utf-8") == "shared sub"
 
 
 def test_organize_movie_subtitles_disabled(tmp_path: Path, monkeypatch):
@@ -239,8 +240,8 @@ def test_organize_movie_hard_link_mode(tmp_path: Path, monkeypatch):
         base_output_dir=tmp_path / "out",
     )
     p_final = Path(final_dir)
-    dest_video = p_final / "IPX-666.mp4"
-    dest_sub = p_final / "IPX-666.srt"
+    dest_video = p_final / "IPX-666-C.mp4"
+    dest_sub = p_final / "IPX-666-C.srt"
 
     assert dest_video.is_file()
     assert dest_sub.is_file()
@@ -301,8 +302,11 @@ def test_organize_movie_auto_c_suffix_enabled_and_disabled(tmp_path: Path, monke
     assert (p_out2 / "IPX-888.srt").is_file()
 
 
-def test_organize_movie_multi_cd_duplicate_shared_subtitle(tmp_path: Path):
+def test_organize_movie_multi_cd_duplicate_shared_subtitle(tmp_path: Path, monkeypatch):
     """测试多分片视频遇到重名防覆盖整理时，多分片文件、共享总字幕与 NFO 均能带 _1，旧文件完整保留。"""
+    cfg = get_config()
+    monkeypatch.setattr(cfg.summarizer.nfo, "basename_pattern", "{filename}")
+    monkeypatch.setattr(cfg.summarizer.subtitle, "auto_c_suffix", False)
     out_dir = tmp_path / "out_multi_dup"
 
     # 第一批次

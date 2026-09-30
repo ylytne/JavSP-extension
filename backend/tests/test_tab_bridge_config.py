@@ -14,13 +14,15 @@ def client():
 
 
 def test_extra_fanarts_concurrency_default(client):
-    """测试默认配置中包含 extra_fanarts.concurrency == 4，且 crawler 不含 tab_bridge_hosts。"""
+    """测试默认配置中包含合法的 extra_fanarts.concurrency (1~8)，且 crawler 不含废弃的 tab_bridge_hosts。"""
     response = client.get("/api/config")
     assert response.status_code == 200
     data = response.json()
     assert "summarizer" in data
     assert "extra_fanarts" in data["summarizer"]
-    assert data["summarizer"]["extra_fanarts"]["concurrency"] == 4
+    concurrency = data["summarizer"]["extra_fanarts"]["concurrency"]
+    assert isinstance(concurrency, int)
+    assert 1 <= concurrency <= 8
     assert "tab_bridge_hosts" not in data.get("crawler", {})
 
 

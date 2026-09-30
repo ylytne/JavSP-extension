@@ -79,7 +79,7 @@ class SummarizerPathConfig(BaseModel):
     length_maximum: int = 250
     length_by_byte: bool = True
     max_actress_count: int = 10
-    hard_link: bool = False
+    hard_link: bool = True
 
 
 class SummarizerTitleConfig(BaseModel):
@@ -99,7 +99,7 @@ class SummarizerDefaultConfig(BaseModel):
 
 class SummarizerNfoConfig(BaseModel):
     """NFO 构造配置。"""
-    basename_pattern: str = "{filename}"
+    basename_pattern: str = "movie"
     title_pattern: str = "{num} {title}"
     custom_genres_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])
     custom_tags_fields: list[str] = Field(default_factory=lambda: ["{genre}", "{censor}"])
@@ -120,7 +120,7 @@ class SummarizerCropConfig(BaseModel):
 class SummarizerCoverConfig(BaseModel):
     """海报封面相关配置。"""
     basename_pattern: str = "poster"
-    add_label: bool = True
+    add_label: bool = False
     use_javdb_cover: Literal["fallback", "never"] = "fallback"
     crop: SummarizerCropConfig = Field(default_factory=SummarizerCropConfig)
 
@@ -151,12 +151,12 @@ def parse_duration_seconds(val: float | int | str) -> float:
 
 class SummarizerExtraFanartsConfig(BaseModel):
     """剧照下载与保存配置。"""
-    enabled: bool = True
-    scrap_interval: float | int | str = 0.5
+    enabled: bool = False
+    scrap_interval: float | int | str = 0
     timeout: float = 10.0
-    max_count: int = 0
+    max_count: int = 10
     uniform_sampling: bool = True
-    concurrency: int = Field(default=4, ge=1, le=8)  # 并发下载通道数 (1~8)
+    concurrency: int = Field(default=5, ge=1, le=8)  # 并发下载通道数 (1~8)
 
     @property
     def scrap_interval_seconds(self) -> float:
@@ -167,7 +167,7 @@ class SummarizerExtraFanartsConfig(BaseModel):
 class SummarizerSubtitleConfig(BaseModel):
     """字幕文件归档整理配置。"""
     enabled: bool = True
-    auto_c_suffix: bool = False
+    auto_c_suffix: bool = True
     filename_extensions: list[str] = Field(
         default_factory=lambda: [".srt", ".vtt", ".ass", ".ssa", ".sbv", ".idx", ".sub"]
     )
@@ -198,13 +198,13 @@ class NetworkConfig(BaseModel):
 
 class CrawlerConfig(BaseModel):
     """爬虫调度与友好抓取延时配置。"""
-    sleep_after_scraping: float = 2.0
-    sleep_jitter: float = 2.0
+    sleep_after_scraping: float = 1.0
+    sleep_jitter: float = 1.0
     # 大批量抓取请求冷却防风控保护 (Burst Protection)
     burst_protection_enabled: bool = True
-    burst_limit: int = 10
-    burst_jitter: int = 2
-    burst_cooldown: float = 60.0
+    burst_limit: int = 15
+    burst_jitter: int = 5
+    burst_cooldown: float = 20.0
     burst_cooldown_jitter: float = 10.0
 
 
@@ -261,7 +261,7 @@ class DimensionRoutingConfig(BaseModel):
     cover: list[str] = Field(default_factory=lambda: ["javbus", "airav", "javdb"])
     previews: list[str] = Field(default_factory=lambda: ["javbus", "javdb"])
     chinese: list[str] = Field(default_factory=lambda: ["airav"])
-    genre: list[str] = Field(default_factory=lambda: ["javdb", "javbus", "airav"])
+    genre: list[str] = Field(default_factory=lambda: ["javdb", "airav", "javbus"])
     actress: list[str] = Field(default_factory=lambda: ["javbus", "javdb", "airav"])
     meta: list[str] = Field(default_factory=lambda: ["javbus", "javdb", "airav"])
 

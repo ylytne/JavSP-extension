@@ -32,6 +32,7 @@ scanner:
   - ^#整理完成$
   - ^#不要扫描$
   minimum_size: 232MiB
+  # 是否跳过已存在 .nfo 元数据的文件夹（设为 true 可跳过已整理/已刮削完成的影片目录）
   skip_nfo_dir: true
 network:
   retry: 3
@@ -43,13 +44,13 @@ network:
     javdb: ''
     airav: ''
 crawler:
-  sleep_after_scraping: 2.0
-  sleep_jitter: 2.0
+  sleep_after_scraping: 1.0
+  sleep_jitter: 1.0
   # 大批量请求冷却防风控保护 (Burst Protection)
   burst_protection_enabled: true
-  burst_limit: 10
-  burst_jitter: 2
-  burst_cooldown: 60.0
+  burst_limit: 15
+  burst_jitter: 5
+  burst_cooldown: 20.0
   burst_cooldown_jitter: 10.0
 crawlers:
 - javbus
@@ -67,8 +68,8 @@ dimension_routing:
   - airav
   genre:
   - javdb
-  - javbus
   - airav
+  - javbus
   actress:
   - javbus
   - javdb
@@ -86,7 +87,7 @@ summarizer:
     length_maximum: 250
     length_by_byte: true
     max_actress_count: 10
-    hard_link: false
+    hard_link: true
   title:
     remove_trailing_actor_name: true
   default:
@@ -98,10 +99,10 @@ summarizer:
     publisher: '#未知发行商'
   nfo:
     # NFO 文件命名规则（无需 .nfo 扩展名）：
-    # - '{filename}' (推荐默认): 与最终视频主文件名严格同名 (例如 SSIS-001.nfo 或 [SSIS-001] 标题.nfo)
+    # - 'movie' (推荐默认): Kodi / Jellyfin / Emby 经典单电影文件夹规范 (生成 movie.nfo)
+    # - '{filename}': 与最终视频主文件名严格同名 (例如 SSIS-001.nfo 或 [SSIS-001] 标题.nfo)
     # - '{num}': 以番号命名 (例如 SSIS-001.nfo)
-    # - 'movie': Kodi / Jellyfin / Emby 经典单电影文件夹规范 (生成 movie.nfo)
-    basename_pattern: '{filename}'
+    basename_pattern: movie
     title_pattern: '{num} {title}'
     custom_genres_fields:
     - '{genre}'
@@ -129,7 +130,7 @@ summarizer:
   - 有码
   - 打码情况未知
   cover:
-    basename_pattern: '{num}-poster'
+    basename_pattern: poster
     add_label: false
     use_javdb_cover: fallback
     crop:
@@ -137,19 +138,20 @@ summarizer:
       engine: null
       standard_fanza_crop: true
   fanart:
-    basename_pattern: '{num}-fanart'
+    basename_pattern: fanart
   extra_fanarts:
-    enabled: true
+    # 是否开启剧照下载与保存 (默认 false，按需在扩展界面或此处开启)
+    enabled: false
     # 单通道间隔延时 (秒，并发模式推荐 0 或低延时以防频控)
-    scrap_interval: 0.5
+    scrap_interval: 0
     timeout: 10.0
     max_count: 10
     uniform_sampling: true
-    # 剧照并发下载通道数 (1~8，默认 4)
-    concurrency: 4
+    # 剧照并发下载通道数 (1~8，默认 5)
+    concurrency: 5
   subtitle:
     enabled: true
-    auto_c_suffix: false
+    auto_c_suffix: true
     filename_extensions:
     - .srt
     - .vtt
@@ -160,11 +162,14 @@ summarizer:
     - .sub
 translator:
   target_lang: zh-CN
-  engine:
-    name: openai
-    url: https://api.groq.com/openai/v1/chat/completions
-    api_key: ''
-    model: qwen/qwen3.8-27b
+  # 翻译引擎（默认 null 为未启用；可选 google, bing, baidu, claude, openai）
+  # 示例（以 OpenAI / 兼容接口为例）：
+  # engine:
+  #   name: openai
+  #   url: https://api.groq.com/openai/v1/chat/completions
+  #   api_key: ''
+  #   model: qwen/qwen3.8-27b
+  engine: null
   fields:
     title: true
     plot: true
@@ -173,5 +178,4 @@ server:
   host: 127.0.0.1
   port: 8765
   # API 访问令牌（强烈建议公网/NAS部署时配置）。留空表示禁用鉴权；配置后前端必须提供匹配的 Token 才能访问
-  token: ""
-
+  token: ''

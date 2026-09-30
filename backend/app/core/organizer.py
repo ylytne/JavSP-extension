@@ -11,11 +11,11 @@ from pathlib import Path
 import re
 import shutil
 import sys
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from PIL import Image
 
-from app.config import get_config
+from app.config import AppConfig, get_config
 from app.core.actress import clean_movie_actresses, get_actress_alias_map, resolve_actress_alias
 from app.core.genre import clean_movie_genres
 from app.core.image import process_cover_image, generate_cropped_poster_base64

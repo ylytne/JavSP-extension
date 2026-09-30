@@ -288,8 +288,8 @@ def test_organizer_actress_alias_and_deduplication(tmp_path: Path):
     # 验证元数据实例同步清洗规整
     assert meta.actress == ["涼森れむ"]
 
-    # 验证生成的 NFO XML 文件（与视频同名，彻底杜绝 thumb 与有毒外链）
-    nfo_file = p_out / "ABF-358-C.nfo"
+    # 验证生成的 NFO XML 文件 (movie.nfo，彻底杜绝 thumb 与有毒外链)
+    nfo_file = p_out / "movie.nfo"
     assert nfo_file.exists()
     nfo_text = nfo_file.read_text(encoding="utf-8")
     assert nfo_text.count("<actor>") == 1
@@ -533,8 +533,8 @@ def test_organize_movie_with_ultra_long_title(tmp_path):
     assert "None" not in dir_name
     assert dir_name.startswith("[SNOS-074-C]")
 
-    # 验证 NFO 中的 <title> 依然完整保留了原始标题，未被截断或损坏（与视频同名）
-    nfo_file = out_path / "SNOS-074-C.nfo"
+    # 验证 NFO 中的 <title> 依然完整保留了原始标题，未被截断或损坏 (movie.nfo)
+    nfo_file = out_path / "movie.nfo"
     assert nfo_file.is_file()
     nfo_content = nfo_file.read_text(encoding="utf-8")
     assert f"<title>SNOS-074-C {ultra_long_title}</title>" in nfo_content or ultra_long_title in nfo_content
@@ -604,8 +604,11 @@ def test_generate_nfo_content_with_plot_cleaning():
     assert "airav.io" not in xml_str
 
 
-def test_organize_movie_duplicate_collision_creates_new_nfo(tmp_path: Path):
+def test_organize_movie_duplicate_collision_creates_new_nfo(tmp_path: Path, monkeypatch):
     """测试当目标目录已存在同名影片时，新视频自增重命名为 _1.mp4 且同步生成 _1.nfo，旧 NFO 不被覆盖。"""
+    cfg = get_config()
+    monkeypatch.setattr(cfg.summarizer.nfo, "basename_pattern", "{filename}")
+    monkeypatch.setattr(cfg.summarizer.subtitle, "auto_c_suffix", False)
     out_dir = tmp_path / "organized"
 
     # 第一批次：整理 IPX-177
@@ -743,7 +746,7 @@ def test_organize_movie_with_output_directory_fallback(tmp_path: Path, monkeypat
     res_path = Path(res)
     assert target_out in res_path.parents or res_path == target_out
     assert (res_path / "MIDE-123.mp4").is_file()
-    assert (res_path / "MIDE-123.nfo").is_file()
+    assert (res_path / "movie.nfo").is_file()
 
 
 def test_organize_movie_inplace_mode(tmp_path: Path):
@@ -769,8 +772,8 @@ def test_organize_movie_inplace_mode(tmp_path: Path):
     assert video_file.is_file()
     assert video_file.read_bytes() == b"inplace video data"
     # 生成的 NFO 也保存在当前同级目录
-    assert (src_dir / "SSIS-999.nfo").is_file()
-    assert "SSIS-999" in (src_dir / "SSIS-999.nfo").read_text(encoding="utf-8")
+    assert (src_dir / "movie.nfo").is_file()
+    assert "SSIS-999" in (src_dir / "movie.nfo").read_text(encoding="utf-8")
 
 
 

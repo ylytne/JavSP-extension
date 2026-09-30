@@ -151,7 +151,7 @@ const PROXY_FREE_SITES: ProxyFreeSiteMeta[] = [
     id: "airav",
     name: "AirAV",
     defaultUrl: "https://airav.io",
-    placeholder: "例如 airavplus2.cc 或 https://... (留空使用官方默认)",
+    placeholder: "例如 airavplus4.cc 或 https://... (留空使用官方默认)",
     badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
   },
 ];
