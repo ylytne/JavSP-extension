@@ -1,6 +1,7 @@
 import React from "react";
 import { Info, ExternalLink } from "lucide-react";
 import { getCrawlerSiteInfo } from "../types";
+import { sanitizeHttpUrl } from "../../../../utils/security";
 
 export interface CrawlerStatusNoticeProps {
   crawlers: string[];
@@ -20,21 +21,21 @@ export const CrawlerStatusNotice: React.FC<CrawlerStatusNoticeProps> = ({
             crawlers.map((c) => {
               const site = getCrawlerSiteInfo(c, proxyFree);
               const name = site?.name || c;
-              const url = site?.url;
+              const safeUrl = sanitizeHttpUrl(site?.url);
 
-              return url ? (
+              return safeUrl ? (
                 <a
                   key={c}
-                  href={url}
+                  href={safeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => {
                     if (typeof chrome !== "undefined" && chrome?.tabs?.create) {
                       e.preventDefault();
-                      chrome.tabs.create({ url });
+                      chrome.tabs.create({ url: safeUrl });
                     }
                   }}
-                  title={`在新标签页打开 ${name} (${url})`}
+                  title={`在新标签页打开 ${name} (${safeUrl})`}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 border border-slate-200/80 hover:border-indigo-300 font-mono font-medium text-[10px] transition cursor-pointer group"
                 >
                   <span>{name}</span>

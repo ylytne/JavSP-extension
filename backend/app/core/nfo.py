@@ -13,7 +13,24 @@ from app.core.actress import clean_movie_actresses
 from app.core.genre import clean_movie_genres
 from app.core.models import MovieInfo, SafeDict
 
-__all__ = ["write_nfo", "generate_nfo_content", "clean_plot_text"]
+__all__ = ["write_nfo", "generate_nfo_content", "clean_plot_text", "clean_xss_tags"]
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>", re.IGNORECASE)
+_DANGEROUS_PROTO_RE = re.compile(r"\b(?:javascript|vbscript|data):", re.IGNORECASE)
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+
+
+def clean_xss_tags(text: str | None) -> str:
+    """清洗文本中的 HTML 标签、脚本伪协议及危险控制字符，防范下游媒体服务器 Stored XSS。"""
+    if not text or not isinstance(text, str):
+        return ""
+    # 1. 移除各类 HTML 标签 (<script>...</script>, <img>, <iframe> 等)
+    cleaned = _HTML_TAG_RE.sub("", text)
+    # 2. 移除常见的危险伪协议标识
+    cleaned = _DANGEROUS_PROTO_RE.sub("", cleaned)
+    # 3. 移除 ASCII 控制字符（保留 \t, \n, \r）
+    cleaned = _CONTROL_CHAR_RE.sub("", cleaned)
+    return cleaned.strip()
 
 
 def clean_plot_text(
@@ -38,10 +55,11 @@ def clean_plot_text(
     cfg = config or get_config()
     nfo_cfg = cfg.summarizer.nfo
 
-    if not nfo_cfg.clean_plot:
-        return plot.strip()
+    # 零信任防御：无条件剥离 HTML 标签及危险伪协议
+    text = clean_xss_tags(plot)
 
-    text = plot.strip()
+    if not nfo_cfg.clean_plot:
+        return text.strip()
 
     # 1. 清洗简介开头出现的番号
     if nfo_cfg.clean_plot_num and num and num.strip():
@@ -112,12 +130,14 @@ def generate_nfo_content(
     movie_elem = E.movie()
 
     # 1. 标题处理
-    nfo_title = cfg.summarizer.nfo.title_pattern.format_map(safe_dict)
+    nfo_title = clean_xss_tags(cfg.summarizer.nfo.title_pattern.format_map(safe_dict))
     movie_elem.append(E.title(nfo_title))
 
     # 2. 原始标题 (过滤纯数字、空白等异常数据)
-    if info.ori_title and info.ori_title.strip() and not re.fullmatch(r"[\d\s]+", info.ori_title):
-        movie_elem.append(E.originaltitle(info.ori_title))
+    if info.ori_title:
+        ori_clean = clean_xss_tags(info.ori_title)
+        if ori_clean and not re.fullmatch(r"[\d\s]+", ori_clean):
+            movie_elem.append(E.originaltitle(ori_clean))
 
     # 3. 评分
     if info.score:
@@ -173,7 +193,9 @@ def generate_nfo_content(
             genres.append(serial_clean)
 
     for g in genres:
-        movie_elem.append(E.genre(g))
+        g_clean = clean_xss_tags(g)
+        if g_clean:
+            movie_elem.append(E.genre(g_clean))
 
     # 9. 标签 (tag)
     tags: list[str] = []
@@ -197,7 +219,9 @@ def generate_nfo_content(
             tags.append(serial_clean)
 
     for t in tags:
-        movie_elem.append(E.tag(t))
+        t_clean = clean_xss_tags(t)
+        if t_clean:
+            movie_elem.append(E.tag(t_clean))
 
     # 10. 国家
     movie_elem.append(E.country("日本"))
@@ -208,24 +232,32 @@ def generate_nfo_content(
 
     # 12. 制作商 / 片商
     if info.producer:
-        movie_elem.append(E.studio(info.producer))
+        prod_clean = clean_xss_tags(info.producer)
+        if prod_clean:
+            movie_elem.append(E.studio(prod_clean))
 
     # 13. 导演
     if info.director:
-        movie_elem.append(E.director(info.director))
+        dir_clean = clean_xss_tags(info.director)
+        if dir_clean:
+            movie_elem.append(E.director(dir_clean))
 
     # 14. 系列
     if info.serial:
-        movie_elem.append(E.set(E.name(info.serial)))
+        serial_clean = clean_xss_tags(info.serial)
+        if serial_clean:
+            movie_elem.append(E.set(E.name(serial_clean)))
 
-    # 15. 预告片 (仅在配置显式开启时写入，默认关闭以避免外部失效/被墙的 m3u8 导致 Jellyfin 卡死)
+    # 15. 预告片 (仅在配置显式开启且为合法 http/https 协议时写入，避免恶意伪协议)
     if cfg.summarizer.nfo.include_trailer and info.preview_video:
-        movie_elem.append(E.trailer(info.preview_video))
+        trailer_clean = info.preview_video.strip()
+        if trailer_clean.lower().startswith(("http://", "https://")):
+            movie_elem.append(E.trailer(trailer_clean))
 
     # 16. 演员（生成规范化演员节点，带 <type>Actor</type> 确保 Jellyfin/Emby 完全兼容，不写 <thumb>）
     if info.actress:
         for act in info.actress:
-            act_clean = act.strip()
+            act_clean = clean_xss_tags(act)
             if not act_clean:
                 continue
             movie_elem.append(E.actor(E.name(act_clean), E.type("Actor")))

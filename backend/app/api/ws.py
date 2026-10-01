@@ -91,11 +91,66 @@ async def send_ws_event(
     await manager.send_personal(websocket, event, data, task_id)
 
 
+def is_allowed_origin(origin: str | None) -> bool:
+    """校验 WebSocket 连接的 Origin 是否为受信来源。
+
+    防范跨站 WebSocket 劫持 (CSWSH)。
+    仅允许：
+    1. 无 Origin 头的本地原生连接 / 测试客户端；
+    2. Chrome 扩展 (chrome-extension://)；
+    3. 本地回环地址 (127.0.0.1, localhost, ::1)；
+    4. 局域网私有 IP 地址 (192.168.*, 10.*, 172.16-31.*)；
+    5. 与服务端配置的 host 匹配的主机名。
+    严禁任何公网外部网站 (如 *.javbus.com, *.com) 发起的跨站连接。
+    """
+    if not origin:
+        return True
+    origin_lower = origin.strip().lower()
+    if origin_lower in ("testserver", "http://testserver", "https://testserver"):
+        return True
+    if origin_lower.startswith("chrome-extension://"):
+        return True
+
+    from urllib.parse import urlparse
+    import ipaddress
+    try:
+        parsed = urlparse(origin_lower)
+        hostname = (parsed.hostname or "").lower()
+        if not hostname:
+            return False
+        if hostname in ("127.0.0.1", "localhost", "::1"):
+            return True
+
+        cfg_host = get_config().server.host.lower()
+        if cfg_host not in ("0.0.0.0", "::", "") and hostname == cfg_host:
+            return True
+
+        # 检查是否为私有局域网 IP
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback:
+                return True
+        except ValueError:
+            pass
+    except Exception:
+        return False
+
+    return False
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     """双向 WebSocket 通信通道，处理扫描触发与单部整理提交。"""
     global _last_scan_dir
 
+    # 1. 跨站 WebSocket 劫持 (CSWSH) 防护: 校验客户端 Origin 来源
+    origin = websocket.headers.get("origin")
+    if not is_allowed_origin(origin):
+        logger.warning("WebSocket 拒绝非法 Origin 来源: %s (client=%s)", origin, websocket.client)
+        await websocket.close(code=4003, reason="Forbidden origin")
+        return
+
+    # 2. 安全访问令牌鉴权
     expected_token = get_expected_token()
     if expected_token:
         token_param = websocket.query_params.get("token", "").strip()

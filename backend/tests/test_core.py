@@ -776,5 +776,86 @@ def test_organize_movie_inplace_mode(tmp_path: Path):
     assert "SSIS-999" in (src_dir / "movie.nfo").read_text(encoding="utf-8")
 
 
+def test_replace_illegal_chars_security():
+    """测试 replace_illegal_chars 针对 Windows 设备保留名、空字符与末尾截断的防御。"""
+    assert replace_illegal_chars("CON") == "CON_"
+    assert replace_illegal_chars("con.mp4") == "con_.mp4"
+    assert replace_illegal_chars("aux") == "aux_"
+    assert replace_illegal_chars("PRN") == "PRN_"
+    assert replace_illegal_chars("nul.mkv") == "nul_.mkv"
+    assert replace_illegal_chars("COM1") == "COM1_"
+    assert replace_illegal_chars("lpt9") == "lpt9_"
+    assert replace_illegal_chars("normal_movie.mp4") == "normal_movie.mp4"
+    assert replace_illegal_chars("test\0null\0char") == "testnullchar"
+    assert replace_illegal_chars("folder. ") == "folder"
+    assert replace_illegal_chars("   ") == "_"
+
+
+def test_nfo_xss_sanitization():
+    """测试 NFO 生成时对 HTML 标签、脚本伪协议的剥离清洗。"""
+    from app.core.nfo import generate_nfo_content, clean_xss_tags
+
+    # 测试底层函数
+    assert clean_xss_tags("<script>alert(1)</script>") == "alert(1)"
+    assert clean_xss_tags("<img src=x onerror=alert(1)>") == ""
+    assert clean_xss_tags("javascript:alert(1)") == "alert(1)"
+
+    # 测试整体 NFO XML 生成
+    info = MovieInfo(
+        dvdid="XSS-001",
+        title="<script>alert('hack')</script>正常标题",
+        ori_title="<b>原始标题</b>",
+        plot="<iframe src='//evil.com'></iframe>简介正文<script>evil()</script>",
+        director="<a href='evil'>导演</a>",
+        producer="<script>片商</script>",
+        serial="<marquee>系列</marquee>",
+        preview_video="javascript:alert(1)",
+        genre=["<style>bad</style>动作"],
+        tag=["<b>热门</b>"],
+        actress=["<script>女优</script>"],
+    )
+    xml_text = generate_nfo_content(info)
+    assert "<script>" not in xml_text
+    assert "</script>" not in xml_text
+    assert "<iframe>" not in xml_text
+    assert "<style>" not in xml_text
+    assert "<marquee>" not in xml_text
+    assert "<b>" not in xml_text
+    assert "<a href=" not in xml_text
+    assert "javascript:" not in xml_text
+    # 正常文本必须保留
+    assert "正常标题" in xml_text
+    assert "原始标题" in xml_text
+    assert "简介正文" in xml_text
+    assert "导演" in xml_text
+    assert "片商" in xml_text
+    assert "系列" in xml_text
+    assert "女优" in xml_text
+
+
+def test_image_decompression_bomb_guard(tmp_path: Path):
+    """测试超大像素解压炸弹防御。"""
+    from app.core.image import valid_pic, get_pic_size, process_cover_image
+    from PIL import Image
+    import unittest.mock as mock
+
+    assert Image.MAX_IMAGE_PIXELS == 16_000_000
+
+    with mock.patch("PIL.Image.open") as mock_open:
+        mock_open.side_effect = Image.DecompressionBombError("Too large image")
+        # 1. valid_pic 应返回 False 而非崩溃
+        assert valid_pic(tmp_path / "bomb.jpg") is False
+
+        # 2. get_pic_size 应捕获并抛出安全 ValueError
+        with pytest.raises(ValueError, match="超出安全限制"):
+            get_pic_size(tmp_path / "bomb.jpg")
+
+        # 3. process_cover_image 应捕获并抛出安全 ValueError
+        dummy_b64 = "data:image/jpeg;base64,AAAA"
+        with pytest.raises(ValueError, match="超出安全限制"):
+            process_cover_image(dummy_b64, tmp_path)
+
+
+
 
 

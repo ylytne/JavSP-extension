@@ -25,10 +25,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# 允许跨域请求（包括 Chrome 扩展的 chrome-extension:// 来源）
+# 严格限制跨域来源（仅放行 Chrome 扩展 chrome-extension:// 协议、本地回环及私有局域网地址）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^(chrome-extension://.*|http://(127\.0\.0\.1|localhost)(:\d+)?|http://(10\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+|192\.168\.\d+)\.\d+(:\d+)?)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

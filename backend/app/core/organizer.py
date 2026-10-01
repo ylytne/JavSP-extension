@@ -27,8 +27,18 @@ logger = logging.getLogger(__name__)
 _PARDIR_REPLACE = re.compile(r"\.{2,}")
 
 
+_WINDOWS_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
+
 def replace_illegal_chars(name: str) -> str:
     """将不能用于文件或文件夹名的非法字符替换为形近全角/Unicode安全字符。"""
+    # 剔除空字符及不可见控制字符
+    name = name.replace("\0", "")
+
     if sys.platform == "win32":
         charmap = {
             "<": "❮",
@@ -44,15 +54,31 @@ def replace_illegal_chars(name: str) -> str:
         for c, rep in charmap.items():
             name = name.replace(c, rep)
     elif sys.platform == "darwin":
-        name = name.replace(":", "：")
+        name = name.replace(":", "：").replace("/", "／").replace("\\", "＼")
     else:
-        name = name.replace("/", "／")
+        # Linux / Docker 环境下同样清洗反斜杠，避免挂载共享盘 (SMB/CIFS) 时出现路径逃逸与混淆
+        name = name.replace("/", "／").replace("\\", "＼")
 
     if ".." in name:
         name = _PARDIR_REPLACE.sub("…", name)
 
     # 剔除换行及回车符
     name = name.replace("\r", "").replace("\n", " ").strip()
+
+    # 清除末尾的句点与空格（防范 Windows NTFS 底层强制截断引发的文件冲突）
+    name = name.rstrip(". ")
+
+    if not name:
+        return "_"
+
+    # Windows 设备保留名冲突防御 (CON, PRN, AUX, NUL, COM1-9, LPT1-9 等)
+    if "." in name:
+        stem, ext = name.split(".", 1)
+        if stem.upper() in _WINDOWS_RESERVED_NAMES:
+            name = f"{stem}_.{ext}"
+    elif name.upper() in _WINDOWS_RESERVED_NAMES:
+        name = f"{name}_"
+
     return name
 
 

@@ -469,6 +469,54 @@ def test_rest_preview_nfo_endpoint(client, tmp_path: Path):
     assert bad_resp.status_code == 400
 
 
+def test_ws_origin_check_rejected(client):
+    """测试带有外部公网 Origin 的 WebSocket 连接会被拒绝 (4003)。"""
+    with pytest.raises(Exception) as exc_info:
+        with client.websocket_connect("/ws", headers={"Origin": "https://www.javbus.com"}) as ws:
+            ws.send_json({"event": "PING", "data": {"time": 123456}})
+            ws.receive_json()
+    assert "4003" in str(exc_info.value) or "Forbidden origin" in str(exc_info.value) or exc_info.type.__name__ == "WebSocketDisconnect"
+
+
+def test_ws_origin_check_allowed(client):
+    """测试来自 Chrome 扩展与本地地址的 Origin 能够正常建立 WebSocket 连接。"""
+    # 1. Chrome 扩展 Origin
+    with client.websocket_connect("/ws", headers={"Origin": "chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn"}) as ws:
+        ws.send_json({"event": "PING", "data": {"time": 123456}})
+        resp = ws.receive_json()
+        assert resp["event"] == "PONG"
+
+    # 2. 本地回环 Origin
+    with client.websocket_connect("/ws", headers={"Origin": "http://127.0.0.1:8765"}) as ws:
+        ws.send_json({"event": "PING", "data": {"time": 654321}})
+        resp = ws.receive_json()
+        assert resp["event"] == "PONG"
+
+
+def test_cors_origin_policy(client):
+    """测试 CORS 来源白名单策略：放行扩展和本地来源，拒绝外部网页来源。"""
+    # 1. 外部网页来源发起跨域预检
+    resp_bad = client.options(
+        "/api/ping",
+        headers={
+            "Origin": "https://evil-attacker.com",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert resp_bad.headers.get("access-control-allow-origin") != "https://evil-attacker.com"
+
+    # 2. Chrome 扩展发起跨域请求
+    resp_good = client.options(
+        "/api/ping",
+        headers={
+            "Origin": "chrome-extension://abcdefghijklmnop",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert resp_good.headers.get("access-control-allow-origin") == "chrome-extension://abcdefghijklmnop"
+
+
+
 
 
 

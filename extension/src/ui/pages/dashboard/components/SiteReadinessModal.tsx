@@ -10,6 +10,7 @@ import {
   Globe,
 } from "lucide-react";
 import { SiteReadinessItem } from "../../../../crawlers/tabBridge";
+import { sanitizeHttpUrl } from "../../../../utils/security";
 
 export interface SiteReadinessModalProps {
   isOpen: boolean;
@@ -116,15 +117,24 @@ export const SiteReadinessModal: React.FC<SiteReadinessModalProps> = ({
                       <span className="text-xs font-bold text-slate-800">
                         {site.name}
                       </span>
-                      <a
-                        href={site.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[11px] text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 font-mono truncate"
-                      >
-                        {site.url}
-                        <ExternalLink className="w-3 h-3 shrink-0" />
-                      </a>
+                      {(() => {
+                        const safeUrl = sanitizeHttpUrl(site.url);
+                        return safeUrl ? (
+                          <a
+                            href={safeUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 font-mono truncate"
+                          >
+                            {safeUrl}
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-slate-500 font-mono truncate">
+                            {site.url}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                   <div className="shrink-0">{getReasonBadge(site.reason)}</div>

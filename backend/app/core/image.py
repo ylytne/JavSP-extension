@@ -14,6 +14,10 @@ from app.core.cropper.interface import get_cropper
 logger = logging.getLogger(__name__)
 
 
+# 零信任防御：限制单张图片最大像素阈值为 1600 万像素（约 4000x4000），有效拦截解压炸弹 (Decompression Bomb / DoS)
+Image.MAX_IMAGE_PIXELS = 16_000_000
+
+
 class LabelPosition(Enum):
     """水印/角标位置枚举。"""
     TOP_LEFT = 1
@@ -23,22 +27,26 @@ class LabelPosition(Enum):
 
 
 def valid_pic(pic_path: str | Path) -> bool:
-    """检查本地图片文件是否完整可读。"""
+    """检查本地图片文件是否完整可读且尺寸在安全限制内。"""
     try:
         with Image.open(pic_path) as img:
             img = ImageOps.exif_transpose(img)
             img.load()
         return True
-    except Exception as e:
-        logger.debug("图片损坏或无法读取: %s (%s)", pic_path, e)
+    except (Image.DecompressionBombError, Exception) as e:
+        logger.warning("图片损坏、无法读取或超出安全限制: %s (%s)", pic_path, e)
         return False
 
 
 def get_pic_size(pic_path: str | Path) -> tuple[int, int]:
     """获取图片文件的实际分辨率 (width, height)。"""
-    with Image.open(pic_path) as pic:
-        pic = ImageOps.exif_transpose(pic)
-        return pic.size
+    try:
+        with Image.open(pic_path) as pic:
+            pic = ImageOps.exif_transpose(pic)
+            return pic.size
+    except Image.DecompressionBombError as e:
+        logger.error("图片分辨率超出安全限制 (1600万像素): %s (%s)", pic_path, e)
+        raise ValueError(f"图片分辨率超出安全限制 (1600万像素): {e}") from e
 
 
 def add_label_to_poster(
@@ -126,9 +134,16 @@ def process_cover_image(
     if "," in cover_base64:
         cover_base64 = cover_base64.split(",", 1)[1]
 
-    img_data = base64.b64decode(cover_base64)
-    original_img = Image.open(io.BytesIO(img_data))
-    original_img = ImageOps.exif_transpose(original_img).convert("RGB")
+    try:
+        img_data = base64.b64decode(cover_base64)
+        original_img = Image.open(io.BytesIO(img_data))
+        original_img = ImageOps.exif_transpose(original_img).convert("RGB")
+    except Image.DecompressionBombError as e:
+        logger.error("封面图片分辨率超出安全上限 (1600万像素)，疑似解压炸弹: %s", e)
+        raise ValueError(f"封面图片分辨率超出安全限制 (1600万像素): {e}") from e
+    except Exception as e:
+        logger.error("解析封面图片异常: %s", e)
+        raise ValueError(f"解析封面图片数据失败: {e}") from e
 
     fanart_path = dest_dir / fanart_name
     poster_path = dest_dir / poster_name
@@ -188,9 +203,16 @@ def generate_cropped_poster_base64(
     if "," in raw_b64:
         raw_b64 = raw_b64.split(",", 1)[1]
 
-    img_data = base64.b64decode(raw_b64)
-    original_img = Image.open(io.BytesIO(img_data))
-    original_img = ImageOps.exif_transpose(original_img).convert("RGB")
+    try:
+        img_data = base64.b64decode(raw_b64)
+        original_img = Image.open(io.BytesIO(img_data))
+        original_img = ImageOps.exif_transpose(original_img).convert("RGB")
+    except Image.DecompressionBombError as e:
+        logger.error("海报图片分辨率超出安全上限 (1600万像素)，疑似解压炸弹: %s", e)
+        raise ValueError(f"海报图片分辨率超出安全限制 (1600万像素): {e}") from e
+    except Exception as e:
+        logger.error("解析海报图片异常: %s", e)
+        raise ValueError(f"解析海报图片数据失败: {e}") from e
 
     cropper = get_cropper(cropper_engine)
     poster_img = cropper.crop(original_img, cropper_ratio, standard_fanza_crop=standard_fanza_crop)

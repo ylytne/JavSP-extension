@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { ScrapePreviewReport, SiteScrapeResult } from "../types";
 import { CRAWLER_SITE_INFO } from "../../dashboard/types";
+import { sanitizeHttpUrl } from "../../../../utils/security";
 
 export interface SourceSitesDetailViewProps {
   report: ScrapePreviewReport;
@@ -163,27 +164,37 @@ export const SourceSitesDetailView: React.FC<SourceSitesDetailViewProps> = ({ re
                 </div>
 
                 {/* 外部来源跳转 (详情页 URL 或站点主页) */}
-                {data?.url ? (
-                  <a
-                    href={data.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium shrink-0"
-                  >
-                    <span>访问数据源网页</span>
-                    <ExternalLink size={12} />
-                  </a>
-                ) : siteFallbackUrl ? (
-                  <a
-                    href={siteFallbackUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium shrink-0"
-                  >
-                    <span>访问站点主页</span>
-                    <ExternalLink size={12} />
-                  </a>
-                ) : null}
+                {(() => {
+                  const safeDataUrl = sanitizeHttpUrl(data?.url);
+                  const safeFallbackUrl = sanitizeHttpUrl(siteFallbackUrl);
+                  if (safeDataUrl) {
+                    return (
+                      <a
+                        href={safeDataUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium shrink-0"
+                      >
+                        <span>访问数据源网页</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    );
+                  }
+                  if (safeFallbackUrl) {
+                    return (
+                      <a
+                        href={safeFallbackUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium shrink-0"
+                      >
+                        <span>访问站点主页</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* 卡片主体内容 */}
@@ -197,10 +208,10 @@ export const SourceSitesDetailView: React.FC<SourceSitesDetailViewProps> = ({ re
                     <p className="text-rose-700 text-[11px] leading-relaxed">
                       详情: {res.errorMsg || "HTTP 403 Forbidden"}。请在 Chrome 新标签页打开该站点通过验证，TabBridge 会自动复用浏览器登录会话。
                     </p>
-                    {siteFallbackUrl && (
+                    {sanitizeHttpUrl(siteFallbackUrl) && (
                       <div className="pt-1">
                         <a
-                          href={siteFallbackUrl}
+                          href={sanitizeHttpUrl(siteFallbackUrl)}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-xs font-semibold shadow-2xs transition"
